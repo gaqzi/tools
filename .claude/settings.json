@@ -1,4 +1,10 @@
 {
+  "sandbox": {
+    "network": {
+      "allowLocalBinding": true
+    },
+    "excludedCommands": ["script/test*", "npx playwright test*"]
+  },
   "hooks": {
     "SessionStart": [
       {
