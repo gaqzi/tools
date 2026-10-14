@@ -7,9 +7,11 @@ import { gramsOfAlcohol, hoursToClear, standardDrinks } from "./alcohol.js";
 class DrinkListsView extends HTMLElement {
   #drinkLists = null;
   #drinks = null;
+  #settings = null;
 
   // The drink lists service, and the drinks service the add-entry select lists.
-  show({ drinkLists, drinks }) {
+  show({ drinkLists, drinks, settings }) {
+    this.#settings = settings;
     this.#drinkLists = drinkLists;
     this.#drinks = drinks;
     this.#build();
@@ -62,7 +64,7 @@ class DrinkListsView extends HTMLElement {
     const amount = this.#drinkLists.amountOf(name);
     const alcohol = this.#drinkLists.alcoholOf(name);
     const percent = amount === 0 ? 0 : (alcohol / amount) * 100;
-    const standard = standardDrinks(gramsOfAlcohol(alcohol));
+    const standard = standardDrinks(gramsOfAlcohol(alcohol), this.#settings);
     const tr = document.createElement("tr");
     tr.dataset.drinkList = name;
     tr.append(

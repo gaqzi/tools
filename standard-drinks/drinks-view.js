@@ -7,9 +7,11 @@ import { gramsOfAlcohol, standardDrinks } from "./alcohol.js";
 class DrinksView extends HTMLElement {
   #drinks = null;
   #liquids = null;
+  #settings = null;
 
   // The drinks service, and the liquids service the add-part select lists.
-  show({ drinks, liquids }) {
+  show({ drinks, liquids, settings }) {
+    this.#settings = settings;
     this.#drinks = drinks;
     this.#liquids = liquids;
     this.#build();
@@ -67,7 +69,7 @@ class DrinksView extends HTMLElement {
       cell("amount", `${this.#drinks.amountOf(name)} ml`),
       cell("alcohol-percent", `${oneDecimal(this.#drinks.alcoholPercentOf(name))} %`),
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
-      cell("standard-drinks", oneDecimal(standardDrinks(gramsOfAlcohol(alcohol)))),
+      cell("standard-drinks", oneDecimal(standardDrinks(gramsOfAlcohol(alcohol), this.#settings))),
       cell("add-part-cell", this.#addPartForm(name, liquidNames)),
       cell("actions", remove),
     );

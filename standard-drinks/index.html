@@ -31,7 +31,7 @@
 
   .container { width: 100%; max-width: 440px; }
 
-  standard-drinks, liquids-view, drinks-view, drink-lists-view { display: block; }
+  standard-drinks, liquids-view, drinks-view, drink-lists-view, catalogue-settings, catalogue-file { display: block; }
 
   h1 {
     font-family: 'DM Serif Display', serif;
@@ -74,6 +74,22 @@
   drink-lists-view td.standard-drinks::after { content: " std"; color: var(--muted); }
   drink-lists-view td.add-entry-cell { flex: 1 0 100%; margin-top: 0.25rem; }
   drink-lists-view p.note { color: var(--muted); font-size: 0.8rem; }
+  catalogue-settings, catalogue-file {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+  }
+  catalogue-settings { margin-bottom: 1rem; }
+  catalogue-settings p.note { color: var(--muted); font-size: 0.8rem; margin-top: 0.5rem; }
+  catalogue-settings input { width: 6rem; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; }
+  catalogue-file { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  catalogue-file .error { flex: 1 0 100%; }
+  catalogue-file button.export { padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; }
+  form.edit-liquid { display: flex; gap: 0.25rem; }
+  form.edit-liquid input[name=alcoholPercent] { flex: 0 0 4.5rem; }
+  td.edit-cell { width: 55%; }
   .error { color: var(--hot); font-size: 0.85rem; min-height: 1.2em; margin-top: 0.5rem; }
 </style>
 </head>
@@ -81,12 +97,15 @@
 <div class="container">
   <h1>Standard Drinks</h1>
   <standard-drinks>
+    <catalogue-settings></catalogue-settings>
     <h2>Liquids</h2>
     <liquids-view></liquids-view>
     <h2>Drinks</h2>
     <drinks-view></drinks-view>
     <h2>Drink lists</h2>
     <drink-lists-view></drink-lists-view>
+    <h2>Export and import</h2>
+    <catalogue-file></catalogue-file>
   </standard-drinks>
 </div>
 <script type="module" src="standard-drinks.js"></script>

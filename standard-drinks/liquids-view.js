@@ -50,6 +50,28 @@ class LiquidsView extends HTMLElement {
     this.dispatchEvent(new CustomEvent("catalogue-changed", { bubbles: true }));
   }
 
+  #editForm({ name, alcoholPercent }) {
+    const form = document.createElement("form");
+    form.className = "edit-liquid";
+    const nameInput = input({ name: "name", type: "text", value: name, required: true });
+    nameInput.setAttribute("aria-label", `Name of ${name}`);
+    const percentInput = input({ name: "alcoholPercent", type: "number", value: alcoholPercent, required: true });
+    Object.assign(percentInput, { step: "any", min: "0", max: "100" });
+    percentInput.setAttribute("aria-label", `Alcohol percent of ${name}`);
+    form.append(nameInput, percentInput, button({ type: "submit", textContent: "Save" }));
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.#attempt(() => {
+        let current = name;
+        if (nameInput.value !== name) current = this.#liquids.rename(name, nameInput.value).name;
+        if (percentInput.valueAsNumber !== alcoholPercent) {
+          this.#liquids.update(current, { alcoholPercent: percentInput.valueAsNumber });
+        }
+      });
+    });
+    return form;
+  }
+
   #row({ name, alcoholPercent }) {
     const tr = document.createElement("tr");
     tr.dataset.liquid = name;
@@ -59,6 +81,7 @@ class LiquidsView extends HTMLElement {
     tr.append(
       cell("name", name),
       cell("alcohol-percent", `${alcoholPercent} %`),
+      cell("edit-cell", this.#editForm({ name, alcoholPercent })),
       cell("actions", remove),
     );
     return tr;
