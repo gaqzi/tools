@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# script/test [unit|browser ...]: run the test suites. Defaults to unit then browser.
+# Stops at the first failing suite so slow browser tests never run on a red unit suite.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+suites=("$@")
+[ ${#suites[@]} -eq 0 ] && suites=(unit browser)
+
+run() {
+  echo "==> $1"
+  case "$1" in
+    unit)    node --test ;;
+    browser) npx playwright test --pass-with-no-tests ;;
+    *) echo "usage: script/test [unit|browser ...]" >&2; exit 2 ;;
+  esac
+}
+
+for suite in "${suites[@]}"; do
+  run "$suite" || { echo "==> $suite FAILED" >&2; exit 1; }
+done

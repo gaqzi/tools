@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# script/server [port]: serve the tools locally. Defaults to http://localhost:8000/
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+exec node serve.js "$@"

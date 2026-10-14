@@ -1,3 +1,92 @@
+# tools
+
+Small single-purpose HTML tools. Each tool is one folder, deployed as-is by
+copying that folder to the web server. What is in the folder is what ships.
+
+## Rules
+
+- **Vanilla only.** HTML, CSS and JavaScript as the browser runs them. No
+  frameworks, no build step, no bundling, no minification. The only
+  dependency allowed in `package.json` is `@playwright/test`.
+- **One folder per tool, self-contained.** A tool never imports from outside
+  its own folder. No `shared/`; copy small things instead.
+- **Logic and UI are separate.** Pure logic lives in ES modules that never
+  touch `document`, `window` or storage. UI lives in web components
+  (`class X extends HTMLElement`, light DOM, no shadow root) and plain
+  classes. Logic is tested in Node; components are only tested in the
+  browser, and only when the interaction is worth it.
+- **Screaming architecture naming.** Name a module after the concept it
+  owns (`mixing.js`, `vessels.js`, `remembered-settings.js`), a component
+  file after its tag (`water-mixer.js` defines `<water-mixer>`), and a test
+  after the module it tests (`mixing.test.js`). Never `utils.js`,
+  `helpers.js`, `app.js` or `calc.js`. If a file is hard to name it is two
+  concepts.
+- **Red-green TDD for all logic.** Write the failing test first, see it
+  fail for the expected reason, then write the code. See the workflow
+  below.
+- **Explicit imports.** `import { x } from "./mixing.js"` with the `.js`
+  extension. Both Node and the browser require it.
+- **Scripts load as modules.** `<script type="module" src="water-mixer.js">`.
+  ES modules do not load over `file://`, so run `script/server` and open
+  `http://localhost:8000/<tool>/`.
+
+## Testing
+
+| Layer | Files | Runner |
+|---|---|---|
+| Logic | `*.test.js` next to the module | `node --test` with `node:assert/strict` |
+| Browser | `*.browser.spec.js` in the tool folder | Playwright, Chromium only |
+
+`node --test` picks up every `*.test.js` in the repo, which is why browser
+tests use the `.browser.spec.js` suffix and nothing else may.
+
+Tests use `describe`/`it` and read as sentences:
+
+```js
+describe("mixing boiling water with room-temperature water", () => {
+  it("needs no boiling water when the target equals room temperature", () => {
+    assert.equal(boilingWaterFor({ totalMl: 500, targetC: 15, roomC: 15 }), 0);
+  });
+});
+```
+
+## Commands
+
+Scripts follow GitHub's "scripts to rule them all" convention
+(https://github.com/github/scripts-to-rule-them-all): every repo task is a
+bash script under `script/` with a conventional name, so the commands are
+the same across repos. Add a new script only for a task that does not fit
+an existing name, and never add a Makefile or npm scripts in its place.
+
+    script/bootstrap     # npm ci + Chromium; re-run if script/test complains
+    script/test          # unit then browser, stops at the first red suite
+    script/test unit     # node --test only
+    script/test browser  # playwright test only
+    script/server        # http://localhost:8000/
+
+Tool versions are pinned in `.tool-versions` (asdf). CI runs
+`script/bootstrap` then `script/test` with the same pin via `actions/setup-node`.
+
+## Change workflow
+
+Changes are planned at the top level in conversation, then executed in
+three separate subagent passes so the tests themselves get checked:
+
+1. **Red.** One agent writes only the tests for the agreed behaviour, named
+   as sentences, plus any empty module stubs needed for them to load. It
+   does not write implementation.
+2. **Verify red.** Run `script/test`. Every new test must fail, and fail for
+   the expected reason (missing behaviour, not a typo or import error).
+   Fix the tests, not the code, if they fail for the wrong reason.
+3. **Green.** A second agent implements until `script/test` is green. It may
+   not edit the tests; if a test is wrong it reports back instead.
+4. **Verify green.** A third agent, given the original plan and not the
+   implementation chat, checks that the tests cover the agreed criteria
+   and that the implementation follows the rules above.
+
+The agent briefs should contain the plan and the file paths, not the
+conversation.
+
 # Agent Instructions
 
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.

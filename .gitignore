@@ -4,3 +4,8 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Tooling
+node_modules/
+test-results/
+playwright-report/

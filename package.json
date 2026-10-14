@@ -1,0 +1,11 @@
+{
+  "name": "tools",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

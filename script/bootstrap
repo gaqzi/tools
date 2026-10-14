@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# script/bootstrap: install everything needed to run the tests.
+# Safe to re-run; run it again whenever script/test complains about tooling.
+# PLAYWRIGHT_INSTALL_FLAGS=--with-deps on CI (Linux needs system packages).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+npm ci
+npx playwright install ${PLAYWRIGHT_INSTALL_FLAGS:-} chromium
