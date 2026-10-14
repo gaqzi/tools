@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<!--
+  WATER MIXER — Design Decisions
+  ===============================
+
+  Purpose:
+  Calculate boiling/cold water ratios to reach a target temperature.
+  Born from a Swedish kitchen use case: making green tea with only a
+  kettle and tap water.
+
+  Results on top:
+  The answer is what you came for — especially on revisit (localStorage)
+  or via shared link (URL params). Inputs are a "settings panel" below.
+
+  Input order — target temp first:
+  Temperature is the primary decision ("what am I brewing?"), volume is
+  secondary ("how much?"), vessel and cold water are rarely-changed settings.
+
+  Three input methods per field (pills + editable text + slider):
+  Pills for fast common choices, slider for sweeping, text for precision.
+  All synced bidirectionally. The contenteditable readout looks like static
+  text until tapped — keeps it clean while remaining accessible.
+
+  Pill highlighting:
+  Pills highlight when the current value matches, regardless of how it was
+  set. Gives instant visual context for where you are in the range.
+
+  Vessel compensation — user sees their drinking temperature:
+  The header says "Mixing for 70 °C" not "Mixing for 78 °C". Compensation
+  is shown as a quiet secondary note. The math accounts for vessel heat
+  loss internally, but the UI frames it as the user's goal, not the
+  implementation detail.
+
+  Rounding to nearest 10 mL:
+  Nobody measures 206 mL at the kettle. Show 210/90 as the big numbers,
+  with exact values in small text only when they differ. Exact labels
+  always reserve space (visibility:hidden) to prevent layout shift.
+
+  Slider colours:
+  Target temp: amber→red (intuitive heat scale). Cold water: icy blue→grey
+  (35°C isn't "cold" so no blue at the warm end). Volume: neutral grey
+  (no semantic meaning to encode).
+
+  Water presets with selective fl oz:
+  fl oz shown only on 300/350/450 — sizes added specifically for American
+  mug conventions. Metric-native sizes (250, 500, 750, 1000) stay clean.
+
+  Vessel offsets (un-preheated):
+  Ceramic teapot +8°C, ceramic mug +5°C, glass teapot +4°C, glass mug +3°C,
+  thermos +3°C (cold inner wall), plastic +2°C. These are approximate —
+  thick/heavy vessels absorb more. Preheated vessels are a different workflow.
+
+  Cold water default — 15°C:
+  Tap water varies by region (7–25°C). 15°C is a reasonable middle ground,
+  biased slightly toward colder climates where this tool originated.
+
+  Persistence — URL params > localStorage > defaults:
+  URL updated via replaceState on every change (no history pollution, always
+  ready to share). Shared links override local settings — correct behaviour
+  for "here's my setup" sharing.
+
+  Mix bar with target label:
+  The bar visualises the hot/cold ratio. The target temperature label sits
+  at the split point, clamped to 8–92% to avoid edge overflow. Serves as
+  both a ratio indicator and a temperature scale.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Water Mixer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f0eb;
+    --card: #fffdf9;
+    --text: #2c2418;
+    --muted: #8a7e6b;
+    --accent: #5a7247;
+    --accent-light: #e8efe4;
+    --hot: #c4522a;
+    --hot-light: #fceee8;
+    --cool: #3a7ca5;
+    --cool-light: #e4f0f7;
+    --border: #e2ddd5;
+    --shadow: 0 2px 20px rgba(44, 36, 24, 0.06);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+
+  .container {
+    width: 100%;
+    max-width: 440px;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.75rem;
+    font-weight: 400;
+    text-align: center;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    margin-bottom: 1rem;
+  }
+
+  .field { margin-bottom: 1.25rem; }
+  .field:last-child { margin-bottom: 0; }
+
+  label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Range / dial styling */
+  .range-wrap {
+    position: relative;
+  }
+
+  .range-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  .range-value-editable {
+    outline: none;
+    border-bottom: 1.5px solid transparent;
+    transition: border-color 0.2s;
+    cursor: text;
+    min-width: 1ch;
+  }
+  .range-value-editable:hover { border-bottom-color: var(--border); }
+  .range-value-editable:focus { border-bottom-color: var(--accent); }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    outline: none;
+    cursor: pointer;
+  }
+
+  /* Per-slider track colors */
+  #targetTemp {
+    background: linear-gradient(to right, #d4a017, #d4772a, var(--hot));
+  }
+  #totalMl {
+    background: var(--border);
+  }
+  #roomTemp {
+    background: linear-gradient(to right, #a8d8ea, #e8e8e8);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 3px solid var(--accent);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    cursor: grab;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 3px solid var(--accent);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    cursor: grab;
+  }
+
+  .preset-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+  }
+
+  .preset-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.35rem 0.65rem;
+    border: 1.5px solid var(--border);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+  .preset-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  /* Vessel selector */
+  .vessel-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .vessel-btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.45rem 0.75rem;
+    border: 1.5px solid var(--border);
+    border-radius: 100px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.3;
+  }
+  .vessel-btn:hover { border-color: var(--accent); }
+  .vessel-btn.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .vessel-btn .vessel-offset {
+    font-size: 0.7rem;
+    color: var(--muted);
+    display: block;
+  }
+  .vessel-btn.active .vessel-offset { color: var(--accent); }
+
+  /* Mixing for header */
+  .mixing-for {
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* Results */
+  .results {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .result-box {
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+  }
+
+  .result-box.hot {
+    background: var(--hot-light);
+    border: 1px solid rgba(196, 82, 42, 0.15);
+  }
+  .result-box.cool {
+    background: var(--cool-light);
+    border: 1px solid rgba(58, 124, 165, 0.15);
+  }
+
+  .result-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+  }
+  .result-box.hot .result-label { color: var(--hot); }
+  .result-box.cool .result-label { color: var(--cool); }
+
+  .result-value {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 0.15rem;
+  }
+  .result-box.hot .result-value { color: var(--hot); }
+  .result-box.cool .result-value { color: var(--cool); }
+
+  .result-unit {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .result-exact {
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+    opacity: 0.7;
+    visibility: hidden;
+  }
+  .result-exact.visible {
+    visibility: visible;
+  }
+
+  .result-temp {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.35rem;
+  }
+
+  /* Warning */
+  .warning {
+    text-align: center;
+    color: var(--hot);
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.75rem;
+    background: var(--hot-light);
+    border-radius: 10px;
+    display: none;
+  }
+  .warning.visible { display: block; }
+
+  /* Tip */
+  .tip {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    line-height: 1.5;
+  }
+
+  /* Visual bar */
+  .mix-bar-wrap {
+    margin-top: 0.5rem;
+    position: relative;
+    padding-bottom: 1.4rem;
+  }
+  .mix-bar {
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    background: var(--border);
+  }
+  .mix-bar .hot-part {
+    background: var(--hot);
+    transition: width 0.3s ease;
+    border-radius: 4px 0 0 4px;
+  }
+  .mix-bar .cool-part {
+    background: var(--cool);
+    transition: width 0.3s ease;
+    border-radius: 0 4px 4px 0;
+  }
+  .mix-bar-label {
+    position: absolute;
+    bottom: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent);
+    transform: translateX(-50%);
+    transition: left 0.3s ease;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Water Mixer</h1>
+  <p class="subtitle">How much hot, how much cold?</p>
+
+  <div class="card">
+    <div class="mixing-for" id="mixingFor">Mixing for 75 °C</div>
+    <div class="results">
+      <div class="result-box hot">
+        <div class="result-label">Boiling water</div>
+        <div class="result-value" id="boilingMl">340</div>
+        <div class="result-unit">mL</div>
+        <div class="result-exact" id="boilingExact"></div>
+        <div class="result-temp">100 °C</div>
+      </div>
+      <div class="result-box cool">
+        <div class="result-label">Cold water</div>
+        <div class="result-value" id="coolMl">160</div>
+        <div class="result-unit">mL</div>
+        <div class="result-exact" id="coolExact"></div>
+        <div class="result-temp" id="coolTemp">20 °C</div>
+      </div>
+    </div>
+
+    <div class="mix-bar-wrap">
+      <div class="mix-bar">
+        <div class="hot-part" id="hotBar"></div>
+        <div class="cool-part" id="coolBar"></div>
+      </div>
+      <div class="mix-bar-label" id="mixBarLabel">75 °C</div>
+    </div>
+
+    <div class="warning" id="warning"></div>
+    <p class="tip">Tip: pour cold water first, then add boiling water. Vessel offsets are approximate — thick or heavy vessels absorb more.</p>
+  </div>
+
+  <div class="card">
+    <div class="field">
+      <label>Target temperature</label>
+      <div class="preset-grid" id="presetGrid" style="margin-bottom: 0.6rem;">
+        <button class="preset-btn" data-val="70">Green tea · 70°</button>
+        <button class="preset-btn" data-val="75">Oolong · 75°</button>
+        <button class="preset-btn" data-val="80">White tea · 80°</button>
+        <button class="preset-btn" data-val="95">Pu-erh · 95°</button>
+        <button class="preset-btn" data-val="100">Herbal · 100°</button>
+        <button class="preset-btn" data-val="92">Coffee (Hoffmann) · 92°</button>
+      </div>
+      <div class="range-wrap">
+        <div class="range-value"><span class="range-value-editable" id="targetReadout" contenteditable="true" inputmode="numeric">75</span>&thinsp;°C</div>
+        <input type="range" id="targetTemp" min="40" max="100" value="75" step="1">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Total water needed</label>
+      <div class="preset-grid" id="mlPresetGrid" style="margin-bottom: 0.6rem;">
+        <button class="preset-btn" data-val="250">250 mL</button>
+        <button class="preset-btn" data-val="300">300 mL · 10 oz</button>
+        <button class="preset-btn" data-val="350">350 mL · 12 oz</button>
+        <button class="preset-btn" data-val="450">450 mL · 16 oz</button>
+        <button class="preset-btn" data-val="500">500 mL</button>
+        <button class="preset-btn" data-val="750">750 mL</button>
+        <button class="preset-btn" data-val="1000">1000 mL</button>
+      </div>
+      <div class="range-wrap">
+        <div class="range-value"><span class="range-value-editable" id="totalReadout" contenteditable="true" inputmode="numeric">500</span>&thinsp;mL</div>
+        <input type="range" id="totalMl" min="50" max="1500" value="500" step="10">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Vessel compensation</label>
+      <div class="vessel-grid" id="vesselGrid">
+        <button class="vessel-btn active" data-offset="0">None<span class="vessel-offset">±0 °C</span></button>
+        <button class="vessel-btn" data-offset="8">Ceramic teapot<span class="vessel-offset">+8 °C</span></button>
+        <button class="vessel-btn" data-offset="5">Ceramic mug<span class="vessel-offset">+5 °C</span></button>
+        <button class="vessel-btn" data-offset="4">Glass teapot<span class="vessel-offset">+4 °C</span></button>
+        <button class="vessel-btn" data-offset="3">Glass mug<span class="vessel-offset">+3 °C</span></button>
+        <button class="vessel-btn" data-offset="3">Thermos<span class="vessel-offset">+3 °C</span></button>
+        <button class="vessel-btn" data-offset="2">Plastic<span class="vessel-offset">+2 °C</span></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Cold water temperature</label>
+      <div class="preset-grid" id="coldPresetGrid" style="margin-bottom: 0.6rem;">
+        <button class="preset-btn" data-val="0">Ice · 0°</button>
+        <button class="preset-btn" data-val="4">Fridge · 4°</button>
+        <button class="preset-btn" data-val="8">Cold climate · 8°</button>
+        <button class="preset-btn" data-val="15">Temperate · 15°</button>
+        <button class="preset-btn" data-val="22">Warm climate · 22°</button>
+        <button class="preset-btn" data-val="28">Tropical · 28°</button>
+      </div>
+      <div class="range-wrap">
+        <div class="range-value"><span class="range-value-editable" id="roomReadout" contenteditable="true" inputmode="numeric">15</span>&thinsp;°C</div>
+        <input type="range" id="roomTemp" min="0" max="35" value="15" step="1">
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // --- Elements ---
+  const $total = document.getElementById('totalMl');
+  const $totalReadout = document.getElementById('totalReadout');
+  const $target = document.getElementById('targetTemp');
+  const $targetReadout = document.getElementById('targetReadout');
+  const $room = document.getElementById('roomTemp');
+  const $roomReadout = document.getElementById('roomReadout');
+  const $mixingFor = document.getElementById('mixingFor');
+  const $mixBarLabel = document.getElementById('mixBarLabel');
+  const $boilingMl = document.getElementById('boilingMl');
+  const $coolMl = document.getElementById('coolMl');
+  const $boilingExact = document.getElementById('boilingExact');
+  const $coolExact = document.getElementById('coolExact');
+  const $coolTemp = document.getElementById('coolTemp');
+  const $hotBar = document.getElementById('hotBar');
+  const $coolBar = document.getElementById('coolBar');
+  const $warning = document.getElementById('warning');
+  const $vesselGrid = document.getElementById('vesselGrid');
+  const $presetGrid = document.getElementById('presetGrid');
+  const $mlPresetGrid = document.getElementById('mlPresetGrid');
+  const $coldPresetGrid = document.getElementById('coldPresetGrid');
+  const vesselBtns = $vesselGrid.querySelectorAll('.vessel-btn');
+
+  const DEFAULTS = { ml: 500, temp: 75, room: 15, vessel: 0 };
+  const STORAGE_KEY = 'tea-water-calc';
+
+  let vesselOffset = 0;
+  let vesselIndex = 0;
+
+  // --- Generic contenteditable ↔ slider sync ---
+  function setupEditableSlider(slider, readout, min, max, defaultVal, textMax) {
+    const clampMax = textMax ?? max;
+    function fromSlider() {
+      readout.textContent = slider.value;
+      calc();
+    }
+    function fromReadout() {
+      const raw = readout.textContent.replace(/[^\d]/g, '');
+      let v = parseInt(raw, 10);
+      if (isNaN(v)) v = defaultVal;
+      v = Math.max(min, Math.min(clampMax, v));
+      slider.value = Math.min(v, max); // slider stays at its max
+      readout.textContent = v;
+      calc();
+    }
+    slider.addEventListener('input', fromSlider);
+    readout.addEventListener('input', fromReadout);
+    readout.addEventListener('blur', fromReadout);
+    readout.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); readout.blur(); return; }
+      if (['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'].includes(e.key)) return;
+      if (/^\d$/.test(e.key)) return;
+      e.preventDefault();
+    });
+    readout.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text').replace(/[^\d]/g, '');
+      document.execCommand('insertText', false, text);
+    });
+  }
+
+  setupEditableSlider($total, $totalReadout, 50, 1500, DEFAULTS.ml, 99999);
+  setupEditableSlider($target, $targetReadout, 40, 100, DEFAULTS.temp);
+  setupEditableSlider($room, $roomReadout, 0, 35, DEFAULTS.room);
+
+  // --- Preset helpers ---
+  function presetHandler(grid, slider, readout) {
+    grid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.preset-btn');
+      if (!btn) return;
+      const v = btn.dataset.val;
+      slider.value = v;
+      readout.textContent = v;
+      calc();
+    });
+  }
+
+  presetHandler($mlPresetGrid, $total, $totalReadout);
+  presetHandler($presetGrid, $target, $targetReadout);
+  presetHandler($coldPresetGrid, $room, $roomReadout);
+
+  // --- Vessel button handling ---
+  $vesselGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.vessel-btn');
+    if (!btn) return;
+    vesselBtns.forEach((b, i) => {
+      b.classList.remove('active');
+      if (b === btn) vesselIndex = i;
+    });
+    btn.classList.add('active');
+    vesselOffset = parseInt(btn.dataset.offset, 10);
+    calc();
+  });
+
+  // --- Persistence ---
+  function getUrlParams() {
+    const p = new URLSearchParams(window.location.search);
+    const result = {};
+    if (p.has('ml')) result.ml = parseInt(p.get('ml'), 10);
+    if (p.has('temp')) result.temp = parseInt(p.get('temp'), 10);
+    if (p.has('room')) result.room = parseInt(p.get('room'), 10);
+    if (p.has('vessel')) result.vessel = parseInt(p.get('vessel'), 10);
+    return result;
+  }
+
+  function getLocalStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
+
+  function saveState() {
+    const state = {
+      ml: parseInt($totalReadout.textContent, 10) || 500,
+      temp: parseInt($target.value, 10),
+      room: parseInt($room.value, 10),
+      vessel: vesselIndex
+    };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
+    const params = new URLSearchParams();
+    params.set('ml', state.ml);
+    params.set('temp', state.temp);
+    params.set('room', state.room);
+    params.set('vessel', state.vessel);
+    history.replaceState(null, '', window.location.pathname + '?' + params.toString());
+  }
+
+  function loadState() {
+    const url = getUrlParams();
+    const stored = getLocalStorage();
+
+    const ml = url.ml ?? stored.ml ?? DEFAULTS.ml;
+    const temp = url.temp ?? stored.temp ?? DEFAULTS.temp;
+    const room = url.room ?? stored.room ?? DEFAULTS.room;
+    const vi = url.vessel ?? stored.vessel ?? DEFAULTS.vessel;
+
+    $total.value = Math.min(ml, 1500);  $totalReadout.textContent = ml;
+    $target.value = temp;    $targetReadout.textContent = temp;
+    $room.value = room;      $roomReadout.textContent = room;
+
+    const idx = Math.max(0, Math.min(vi, vesselBtns.length - 1));
+    vesselBtns.forEach(b => b.classList.remove('active'));
+    vesselBtns[idx].classList.add('active');
+    vesselIndex = idx;
+    vesselOffset = parseInt(vesselBtns[idx].dataset.offset, 10);
+  }
+
+  // --- Pill highlight sync ---
+  function syncPillHighlight(grid, value) {
+    grid.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.val === String(value));
+    });
+  }
+
+  // --- Calculation ---
+  function calc() {
+    const total = parseInt($totalReadout.textContent, 10) || 0;
+    const target = parseFloat($target.value) || 0;
+    const room = parseFloat($room.value) || 20;
+    const effectiveTarget = target + vesselOffset;
+
+    // Sync pill highlights
+    syncPillHighlight($mlPresetGrid, total);
+    syncPillHighlight($presetGrid, target);
+    syncPillHighlight($coldPresetGrid, room);
+
+    $coolTemp.textContent = room + ' °C';
+
+    // Update mixing-for header
+    if (vesselOffset > 0) {
+      $mixingFor.innerHTML = 'Mixing for ' + target + ' °C<br><span style="font-size:0.75rem;font-weight:400;color:var(--muted)">+' + vesselOffset + ' °C vessel compensation</span>';
+    } else {
+      $mixingFor.textContent = 'Mixing for ' + target + ' °C';
+    }
+
+    if (effectiveTarget <= room) {
+      $warning.textContent = 'Target (with vessel compensation) must be above room temperature.';
+      $warning.classList.add('visible');
+      $boilingMl.textContent = '0';
+      $coolMl.textContent = Math.round(total / 10) * 10;
+      $boilingExact.textContent = '';
+      $coolExact.textContent = '';
+      $hotBar.style.width = '0%';
+      $coolBar.style.width = '100%';
+      saveState();
+      return;
+    }
+    if (effectiveTarget > 100) {
+      $warning.textContent = 'Target + vessel compensation exceeds 100 °C — use only boiling water, or lower your target.';
+      $warning.classList.add('visible');
+      $boilingMl.textContent = Math.round(total / 10) * 10;
+      $coolMl.textContent = '0';
+      $boilingExact.textContent = '';
+      $coolExact.textContent = '';
+      $hotBar.style.width = '100%';
+      $coolBar.style.width = '0%';
+      saveState();
+      return;
+    }
+
+    $warning.classList.remove('visible');
+
+    const boilingExact = total * (effectiveTarget - room) / (100 - room);
+    const coolExact = total - boilingExact;
+
+    const boilingRound = Math.round(boilingExact / 10) * 10;
+    const coolRound = Math.round(coolExact / 10) * 10;
+    const boilingPrecise = Math.round(boilingExact);
+    const coolPrecise = Math.round(coolExact);
+
+    $boilingMl.textContent = boilingRound;
+    $coolMl.textContent = coolRound;
+
+    if (boilingRound !== boilingPrecise) {
+      $boilingExact.textContent = '(exact: ' + boilingPrecise + ' mL)';
+      $boilingExact.classList.add('visible');
+    } else {
+      $boilingExact.textContent = '\u00a0';
+      $boilingExact.classList.remove('visible');
+    }
+    if (coolRound !== coolPrecise) {
+      $coolExact.textContent = '(exact: ' + coolPrecise + ' mL)';
+      $coolExact.classList.add('visible');
+    } else {
+      $coolExact.textContent = '\u00a0';
+      $coolExact.classList.remove('visible');
+    }
+
+    const pct = (boilingExact / total) * 100;
+    $hotBar.style.width = pct + '%';
+    $coolBar.style.width = (100 - pct) + '%';
+
+    // Position target label on bar, clamped to avoid overflow
+    const clampedPct = Math.max(8, Math.min(92, pct));
+    $mixBarLabel.style.left = clampedPct + '%';
+    $mixBarLabel.textContent = target + ' °C';
+
+    saveState();
+  }
+
+  // Init
+  loadState();
+  calc();
+</script>
+
+</body>
+</html>
