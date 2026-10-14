@@ -1,17 +1,15 @@
-// Refactor oracle for the water-temperature tool.
+// Browser spec for the water-temperature tool.
 //
-// Written against the pre-migration index.html (single inline script, no
-// modules) so that the behaviour of the shipped page was pinned down before
-// it was split into logic modules and web components. Bugs found while
-// pinning it were written up as the correct behaviour and fixed by the
-// migration, so every assertion here describes what the page does now.
+// The spec follows the state-object pattern: the whole page is one `mixer`
+// object built by `defaultMixer()` with overrides, applied through the UI by
+// `setMixer()`, read back by `readMixer()`, and compared in one `expect` per
+// test. A test therefore shows only what differs from a clean load. Expected
+// values are literals; nothing in this file recomputes the page's formula.
 //
-// The spec follows the state-object pattern and is the worked example for
-// it: the whole page is one `mixer` object built by `defaultMixer()` with
-// overrides, applied through the UI by `setMixer()`, read back by
-// `readMixer()`, and compared in one `expect` per test. A test therefore
-// shows only what differs from a clean load. Expected values are literals;
-// nothing in this file recomputes the page's formula.
+// Browser tests prove wiring and rendering: each visual state once, each
+// interaction path once, persistence once. Every rule about the numbers
+// (rounding, clamping, warnings, precedence) is pinned in the unit tests of
+// mixing.js, bounded-number.js, remembered-settings.js and vessels.js.
 import { test, expect } from "@playwright/test";
 
 const PAGE = "/water-temperature/";
@@ -99,19 +97,53 @@ const greenTea = (overrides = {}) =>
     ...overrides,
   });
 
-// Herbal at 100 °C: all boiling water, no exact amounts, and the bar label
-// at the 92% cap.
-const herbalTea = (overrides = {}) =>
+// Green tea at 70 °C in a ceramic teapot: 500 * (78 - 15) / (100 - 15) = 370.6
+const greenTeaInTeapot = (overrides = {}) =>
   defaultMixer({
-    target: 100,
-    sliders: defaultSliders({ target: 100 }),
-    highlighted: defaultHighlighted({ target: "Herbal · 100°" }),
+    target: 70,
+    vessel: "Ceramic teapot",
+    sliders: defaultSliders({ target: 70 }),
+    highlighted: defaultHighlighted({ target: "Green tea · 70°" }),
+    results: defaultResults({
+      boiling: 370, cold: 130, boilingExact: 371, coldExact: 129,
+      mixingFor: "Mixing for 70 °C", compensation: 8,
+      hotPct: 74.12, coldPct: 25.88, labelPct: 74.12, barLabel: "70 °C",
+    }),
+    remembered: remembered({ temp: 70, vessel: 1 }),
+    ...overrides,
+  });
+
+// Pu-erh at 95 °C in a ceramic teapot wants 103 °C water: all boiling, no
+// exact amounts, the warning shown, and the bar label at the 92% cap.
+const puerhInTeapot = (overrides = {}) =>
+  defaultMixer({
+    target: 95,
+    vessel: "Ceramic teapot",
+    sliders: defaultSliders({ target: 95 }),
+    highlighted: defaultHighlighted({ target: "Pu-erh · 95°" }),
     results: defaultResults({
       boiling: 500, cold: 0, boilingExact: null, coldExact: null,
-      mixingFor: "Mixing for 100 °C",
-      hotPct: 100, coldPct: 0, labelPct: 92, barLabel: "100 °C",
+      mixingFor: "Mixing for 95 °C", compensation: 8,
+      warning: "Target + vessel compensation exceeds 100 °C — use only boiling water, or lower your target.",
+      hotPct: 100, coldPct: 0, labelPct: 92, barLabel: "95 °C",
     }),
-    remembered: remembered({ temp: 100 }),
+    remembered: remembered({ temp: 95, vessel: 1 }),
+    ...overrides,
+  });
+
+// What the page shows while the target slider sits at its 40 °C floor:
+// 500 * (40 - 15) / (100 - 15) = 147.1
+const clampedToFloor = (overrides = {}) =>
+  defaultMixer({
+    target: 40,
+    sliders: defaultSliders({ target: 40 }),
+    highlighted: defaultHighlighted({ target: null }),
+    results: defaultResults({
+      boiling: 150, cold: 350, boilingExact: 147, coldExact: 353,
+      mixingFor: "Mixing for 40 °C",
+      hotPct: 29.41, coldPct: 70.59, labelPct: 29.41, barLabel: "40 °C",
+    }),
+    remembered: remembered({ temp: 40 }),
     ...overrides,
   });
 
@@ -124,8 +156,8 @@ function readMixer(page) {
     const pct = (id, prop) => Math.round(parseFloat($(id).style[prop]) * 100) / 100;
     const pillIn = (grid) => $(grid).querySelector(".preset-btn.active")?.textContent ?? null;
     // A hidden exact label reads as null. A visible one reads as the number
-    // it names, or as "" when it is visible but blank, which is a bug the
-    // page has today in its warning branches and never an expected value.
+    // it names, or as "" when it is visible but blank, which is never an
+    // expected value.
     const exact = (id) => {
       if (!$(id).classList.contains("visible")) return null;
       const amount = $(id).textContent.match(/\d+/);
@@ -213,12 +245,12 @@ test.describe("opening the mixer with no saved state", () => {
   });
 });
 
-test.describe("calculating the mix", () => {
+test.describe("rendering a mix", () => {
   test.beforeEach(async ({ page }) => {
     await openMixer(page);
   });
 
-  test("rounds to 10 mL and shows the exact amounts when they differ", async ({ page }) => {
+  test("shows the rounded amounts and the exact amounts when they differ", async ({ page }) => {
     const mixer = greenTea();
     await setMixer(page, mixer);
     await expect.poll(() => readMixer(page)).toEqual(mixer);
@@ -236,53 +268,14 @@ test.describe("calculating the mix", () => {
     await setMixer(page, mixer);
     await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
-
-  test("keeps the bar label at 92% when the mix is all boiling water", async ({ page }) => {
-    const mixer = herbalTea();
-    await setMixer(page, mixer);
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
-  });
-
-  test("keeps the bar label at 8% when the mix is almost all cold water", async ({ page }) => {
-    // 500 * (40 - 35) / (100 - 35) = 38.5 mL, 7.69% of the total.
-    const mixer = defaultMixer({
-      target: 40,
-      room: 35,
-      sliders: defaultSliders({ target: 40, room: 35 }),
-      highlighted: defaultHighlighted({ target: null, room: null }),
-      results: defaultResults({
-        boiling: 40, cold: 460, boilingExact: 38, coldExact: 462,
-        mixingFor: "Mixing for 40 °C", coolTemp: 35,
-        hotPct: 7.69, coldPct: 92.31, labelPct: 8, barLabel: "40 °C",
-      }),
-      remembered: remembered({ temp: 40, room: 35 }),
-    });
-    await setMixer(page, mixer);
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
-  });
 });
 
 test.describe("compensating for the vessel", () => {
-  // Green tea at 70 °C in a ceramic teapot: 500 * (78 - 15) / (100 - 15) = 370.6
-  const greenTeaInTeapot = () =>
-    defaultMixer({
-      target: 70,
-      vessel: "Ceramic teapot",
-      sliders: defaultSliders({ target: 70 }),
-      highlighted: defaultHighlighted({ target: "Green tea · 70°" }),
-      results: defaultResults({
-        boiling: 370, cold: 130, boilingExact: 371, coldExact: 129,
-        mixingFor: "Mixing for 70 °C", compensation: 8,
-        hotPct: 74.12, coldPct: 25.88, labelPct: 74.12, barLabel: "70 °C",
-      }),
-      remembered: remembered({ temp: 70, vessel: 1 }),
-    });
-
   test.beforeEach(async ({ page }) => {
     await openMixer(page);
   });
 
-  test("adds the vessel offset to the target and says so", async ({ page }) => {
+  test("shows the vessel compensation note", async ({ page }) => {
     const mixer = greenTeaInTeapot();
     await setMixer(page, mixer);
     await expect.poll(() => readMixer(page)).toEqual(mixer);
@@ -300,97 +293,19 @@ test.describe("warning about impossible mixes", () => {
   // target slider floors at 40 and the room slider caps at 35, and URL
   // parameters are written into the sliders too, so the state is unreachable.
 
-  // Pu-erh at 95 °C in a ceramic teapot wants 103 °C water: all boiling, no
-  // exact amounts, and the bar label at the 92% cap.
-  const puerhInTeapot = () =>
-    defaultMixer({
-      target: 95,
-      vessel: "Ceramic teapot",
-      sliders: defaultSliders({ target: 95 }),
-      highlighted: defaultHighlighted({ target: "Pu-erh · 95°" }),
-      results: defaultResults({
-        boiling: 500, cold: 0, boilingExact: null, coldExact: null,
-        mixingFor: "Mixing for 95 °C", compensation: 8, warning: "Target + vessel compensation exceeds 100 °C — use only boiling water, or lower your target.",
-        hotPct: 100, coldPct: 0, labelPct: 92, barLabel: "95 °C",
-      }),
-      remembered: remembered({ temp: 95, vessel: 1 }),
-    });
-
-  test.beforeEach(async ({ page }) => {
+  test("shows the warning, hides the exact amounts and caps the bar label when the mix exceeds 100 °C", async ({ page }) => {
     await openMixer(page);
-  });
-
-  test("uses only boiling water when target plus vessel compensation exceeds 100 °C", async ({ page }) => {
-    // Bug in the page today: the warning branch blanks the exact labels but
-    // leaves them visible, so they read as "" instead of null.
     const mixer = puerhInTeapot();
     await setMixer(page, mixer);
     await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
-
-  test("moves the bar label to the all-boiling position when the warning appears", async ({ page }) => {
-    // Bug in the page today: the warning branch never repositions the bar
-    // label, so it keeps the position of the last possible mix (93 °C alone:
-    // 91.76%). The migration will make this pass.
-    // 93 °C in a ceramic teapot wants 101 °C water.
-    const mixer = defaultMixer({
-      target: 93,
-      vessel: "Ceramic teapot",
-      sliders: defaultSliders({ target: 93 }),
-      highlighted: defaultHighlighted({ target: null }),
-      results: defaultResults({
-        boiling: 500, cold: 0, boilingExact: null, coldExact: null,
-        mixingFor: "Mixing for 93 °C", compensation: 8, warning: "Target + vessel compensation exceeds 100 °C — use only boiling water, or lower your target.",
-        hotPct: 100, coldPct: 0, labelPct: 92, barLabel: "93 °C",
-      }),
-      remembered: remembered({ temp: 93, vessel: 1 }),
-    });
-    await setMixer(page, mixer);
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
-  });
-
-  test("clears the warning once the mix is possible again", async ({ page }) => {
-    await setMixer(page, puerhInTeapot());
-    await vessel(page, "None").click();
-    // 500 * (95 - 15) / (100 - 15) = 470.6
-    const mixer = defaultMixer({
-      target: 95,
-      sliders: defaultSliders({ target: 95 }),
-      highlighted: defaultHighlighted({ target: "Pu-erh · 95°" }),
-      results: defaultResults({
-        boiling: 470, cold: 30, boilingExact: 471, coldExact: 29,
-        mixingFor: "Mixing for 95 °C",
-        hotPct: 94.12, coldPct: 5.88, labelPct: 92, barLabel: "95 °C",
-      }),
-      remembered: remembered({ temp: 95 }),
-    });
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
-  });
-
-  test("treats 0 °C cold water as 0 °C", async ({ page }) => {
-    // Bug in the page today: `parseFloat($room.value) || 20` turns a room
-    // temperature of 0 into 20, so "Ice · 0°" is computed as 20 °C.
-    // 1000 * (75 - 0) / (100 - 0) = 750 exactly.
-    const mixer = defaultMixer({
-      total: 1000,
-      room: 0,
-      sliders: defaultSliders({ total: 1000, room: 0 }),
-      highlighted: defaultHighlighted({ total: "1000 mL", room: "Ice · 0°" }),
-      results: defaultResults({
-        boiling: 750, cold: 250, boilingExact: null, coldExact: null,
-        coolTemp: 0,
-        hotPct: 75, coldPct: 25, labelPct: 75,
-      }),
-      remembered: remembered({ ml: 1000, room: 0 }),
-    });
-    await pill(page, "1000 mL").click();
-    await pill(page, "Ice · 0°").click();
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
-  });
 });
 
-// Each field is driven through one control at a time; `mixer` is the whole
-// page state expected afterwards.
+// A parameterised table: the three readouts (target temperature, total water,
+// cold water temperature) are the same component wired to three sliders and
+// pill grids, so the wiring is proven once, on the target temperature. A new
+// field is added by adding a row. Each field is driven through one control at
+// a time; `mixer` is the whole page state expected afterwards.
 const fields = [
   {
     name: "target temperature",
@@ -440,112 +355,6 @@ const fields = [
           hotPct: 90.59, coldPct: 9.41, labelPct: 90.59, barLabel: "92 °C",
         }),
         remembered: remembered({ temp: 92 }),
-      }),
-    },
-  },
-  {
-    name: "total water",
-    slider: "totalMl",
-    readout: "totalReadout",
-    pill: {
-      name: "300 mL · 10 oz",
-      mixer: defaultMixer({
-        total: 300,
-        sliders: defaultSliders({ total: 300 }),
-        highlighted: defaultHighlighted({ total: "300 mL · 10 oz" }),
-        results: defaultResults({ boiling: 210, cold: 90, boilingExact: 212, coldExact: 88 }),
-        remembered: remembered({ ml: 300 }),
-      }),
-    },
-    slid: {
-      value: "750",
-      mixer: defaultMixer({
-        total: 750,
-        sliders: defaultSliders({ total: 750 }),
-        highlighted: defaultHighlighted({ total: "750 mL" }),
-        results: defaultResults({ boiling: 530, cold: 220, boilingExact: 529, coldExact: 221 }),
-        remembered: remembered({ ml: 750 }),
-      }),
-    },
-    offPill: {
-      value: "760",
-      mixer: defaultMixer({
-        total: 760,
-        sliders: defaultSliders({ total: 760 }),
-        highlighted: defaultHighlighted({ total: null }),
-        results: defaultResults({ boiling: 540, cold: 220, boilingExact: 536, coldExact: 224 }),
-        remembered: remembered({ ml: 760 }),
-      }),
-    },
-    typed: {
-      value: "250",
-      mixer: defaultMixer({
-        total: 250,
-        sliders: defaultSliders({ total: 250 }),
-        highlighted: defaultHighlighted({ total: "250 mL" }),
-        results: defaultResults({ boiling: 180, cold: 70, boilingExact: 176, coldExact: 74 }),
-        remembered: remembered({ ml: 250 }),
-      }),
-    },
-  },
-  {
-    name: "cold water temperature",
-    slider: "roomTemp",
-    readout: "roomReadout",
-    pill: {
-      name: "Fridge · 4°",
-      mixer: defaultMixer({
-        room: 4,
-        sliders: defaultSliders({ room: 4 }),
-        highlighted: defaultHighlighted({ room: "Fridge · 4°" }),
-        results: defaultResults({
-          boiling: 370, cold: 130, boilingExact: null, coldExact: null,
-          coolTemp: 4,
-          hotPct: 73.96, coldPct: 26.04, labelPct: 73.96,
-        }),
-        remembered: remembered({ room: 4 }),
-      }),
-    },
-    slid: {
-      value: "22",
-      mixer: defaultMixer({
-        room: 22,
-        sliders: defaultSliders({ room: 22 }),
-        highlighted: defaultHighlighted({ room: "Warm climate · 22°" }),
-        results: defaultResults({
-          boiling: 340, cold: 160, boilingExact: null, coldExact: null,
-          coolTemp: 22,
-          hotPct: 67.95, coldPct: 32.05, labelPct: 67.95,
-        }),
-        remembered: remembered({ room: 22 }),
-      }),
-    },
-    offPill: {
-      value: "23",
-      mixer: defaultMixer({
-        room: 23,
-        sliders: defaultSliders({ room: 23 }),
-        highlighted: defaultHighlighted({ room: null }),
-        results: defaultResults({
-          boiling: 340, cold: 160, boilingExact: 338, coldExact: 162,
-          coolTemp: 23,
-          hotPct: 67.53, coldPct: 32.47, labelPct: 67.53,
-        }),
-        remembered: remembered({ room: 23 }),
-      }),
-    },
-    typed: {
-      value: "28",
-      mixer: defaultMixer({
-        room: 28,
-        sliders: defaultSliders({ room: 28 }),
-        highlighted: defaultHighlighted({ room: "Tropical · 28°" }),
-        results: defaultResults({
-          boiling: 330, cold: 170, boilingExact: 326, coldExact: 174,
-          coolTemp: 28,
-          hotPct: 65.28, coldPct: 34.72, labelPct: 65.28,
-        }),
-        remembered: remembered({ room: 28 }),
       }),
     },
   },
@@ -634,69 +443,24 @@ test.describe("guarding what goes into a readout", () => {
     await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
 
-  test("focuses the readout when it is clicked", async ({ page }) => {
-    await text(page, "totalReadout").click();
-    await expect.poll(() => readMixer(page)).toEqual(defaultMixer({ focused: "totalReadout" }));
-  });
-
   test("blurs the readout on Enter", async ({ page }) => {
     await text(page, "totalReadout").click();
     await page.keyboard.press("Enter");
     await expect.poll(() => readMixer(page)).toEqual(defaultMixer());
   });
 
-  for (const id of ["totalReadout", "targetReadout", "roomReadout"]) {
-    test(`restores the default when ${id} is cleared and left`, async ({ page }) => {
-      await text(page, id).click();
-      await selectReadout(page, id);
-      await page.keyboard.press("Backspace");
-      await text(page, id).blur();
-      await expect.poll(() => readMixer(page)).toEqual(defaultMixer());
-    });
-  }
-
-  test("clamps a target above 100 down to 100", async ({ page }) => {
-    await typeReadout(page, "targetReadout", "200");
-    await expect.poll(() => readMixer(page)).toEqual(herbalTea());
-  });
-
-  test("clamps a volume below 50 up to 50", async ({ page }) => {
-    await typeReadout(page, "totalReadout", "0");
-    // 50 * (75 - 15) / (100 - 15) = 35.3
-    const mixer = defaultMixer({
-      total: 50,
-      sliders: defaultSliders({ total: 50 }),
-      highlighted: defaultHighlighted({ total: null }),
-      results: defaultResults({ boiling: 40, cold: 10, boilingExact: 35, coldExact: 15 }),
-      remembered: remembered({ ml: 50 }),
-    });
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
+  test("restores the default when a readout is cleared and left", async ({ page }) => {
+    await text(page, "totalReadout").click();
+    await selectReadout(page, "totalReadout");
+    await page.keyboard.press("Backspace");
+    await text(page, "totalReadout").blur();
+    await expect.poll(() => readMixer(page)).toEqual(defaultMixer());
   });
 });
 
 test.describe("typing a target one keystroke at a time", () => {
-  // Bug in the page today: the readout's `input` handler clamps the text on
-  // every keystroke, so a "7" on its way to "70" is rewritten to "40" before
-  // the "0" can be typed. Expected: the readout keeps what was typed, the
-  // slider and the mix follow the clamped value, and only blur or Enter
-  // clamps the readout text. The migration will make these pass.
-
-  // What the page shows while the target slider sits at its 40 °C floor:
-  // 500 * (40 - 15) / (100 - 15) = 147.1
-  const clampedToFloor = (overrides = {}) =>
-    defaultMixer({
-      target: 40,
-      sliders: defaultSliders({ target: 40 }),
-      highlighted: defaultHighlighted({ target: null }),
-      results: defaultResults({
-        boiling: 150, cold: 350, boilingExact: 147, coldExact: 353,
-        mixingFor: "Mixing for 40 °C",
-        hotPct: 29.41, coldPct: 70.59, labelPct: 29.41, barLabel: "40 °C",
-      }),
-      remembered: remembered({ temp: 40 }),
-      ...overrides,
-    });
-
+  // The readout keeps what was typed while the slider and the mix follow the
+  // clamped value; only blur or Enter clamps the readout text.
   test.beforeEach(async ({ page }) => {
     await openMixer(page);
     await text(page, "targetReadout").click();
@@ -744,21 +508,23 @@ test.describe("remembering the settings", () => {
   });
 
   test("restores from localStorage when the URL has no parameters", async ({ page }) => {
-    await openMixer(page, { stored: defaultSettings({ ml: 1000, temp: 80, room: 8, vessel: 3 }) });
-    // 1000 * (84 - 8) / (100 - 8) = 826.1
+    // A stored room of 0 °C also proves the page renders 0 °C cold water as
+    // 0 °C rather than treating it as missing.
+    await openMixer(page, { stored: defaultSettings({ ml: 1000, temp: 80, room: 0, vessel: 3 }) });
+    // 1000 * (84 - 0) / (100 - 0) = 840 exactly.
     const mixer = defaultMixer({
       total: 1000,
       target: 80,
-      room: 8,
+      room: 0,
       vessel: "Glass teapot",
-      sliders: defaultSliders({ total: 1000, target: 80, room: 8 }),
-      highlighted: defaultHighlighted({ total: "1000 mL", target: "White tea · 80°", room: "Cold climate · 8°" }),
+      sliders: defaultSliders({ total: 1000, target: 80, room: 0 }),
+      highlighted: defaultHighlighted({ total: "1000 mL", target: "White tea · 80°", room: "Ice · 0°" }),
       results: defaultResults({
-        boiling: 830, cold: 170, boilingExact: 826, coldExact: 174,
-        mixingFor: "Mixing for 80 °C", compensation: 4, coolTemp: 8,
-        hotPct: 82.61, coldPct: 17.39, labelPct: 82.61, barLabel: "80 °C",
+        boiling: 840, cold: 160, boilingExact: null, coldExact: null,
+        mixingFor: "Mixing for 80 °C", compensation: 4, coolTemp: 0,
+        hotPct: 84, coldPct: 16, labelPct: 84, barLabel: "80 °C",
       }),
-      remembered: remembered({ ml: 1000, temp: 80, room: 8, vessel: 3 }),
+      remembered: remembered({ ml: 1000, temp: 80, room: 0, vessel: 3 }),
     });
     await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
@@ -801,7 +567,7 @@ test.describe("remembering the settings", () => {
     await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
 
-  test("clamps an out-of-range vessel index to the last vessel", async ({ page }) => {
+  test("clamps an out-of-range vessel index to the last vessel and rewrites the URL", async ({ page }) => {
     await openMixer(page, { params: { vessel: 99 } });
     // 500 * (77 - 15) / (100 - 15) = 364.7
     const mixer = defaultMixer({
@@ -818,31 +584,8 @@ test.describe("remembering the settings", () => {
 });
 
 test.describe("recovering from a tampered URL", () => {
-  // These document behaviour the migration will add: today the page trusts
-  // URL parameters as-is (NaN readouts, a crash on a non-numeric vessel, and
-  // readouts outside the slider range).
   test("falls back to the defaults for non-numeric parameters and rewrites the URL", async ({ page }) => {
     await openMixer(page, { params: { temp: "abc", ml: "xyz", room: "foo", vessel: "bar" } });
     await expect.poll(() => readMixer(page)).toEqual(defaultMixer());
-  });
-
-  test("clamps out-of-range parameters and rewrites the URL to match", async ({ page }) => {
-    await openMixer(page, { params: { ml: 5, temp: 200, room: 99 } });
-    // Clamped to 50 mL, 100 °C and 35 °C: 50 * (100 - 35) / (100 - 35) = 50
-    // exactly, so all boiling, no exact amounts, and the label at the 92% cap.
-    const mixer = defaultMixer({
-      total: 50,
-      target: 100,
-      room: 35,
-      sliders: defaultSliders({ total: 50, target: 100, room: 35 }),
-      highlighted: defaultHighlighted({ total: null, target: "Herbal · 100°", room: null }),
-      results: defaultResults({
-        boiling: 50, cold: 0, boilingExact: null, coldExact: null,
-        mixingFor: "Mixing for 100 °C", coolTemp: 35,
-        hotPct: 100, coldPct: 0, labelPct: 92, barLabel: "100 °C",
-      }),
-      remembered: remembered({ ml: 50, temp: 100, room: 35 }),
-    });
-    await expect.poll(() => readMixer(page)).toEqual(mixer);
   });
 });
