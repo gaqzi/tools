@@ -2,7 +2,8 @@
 // A drink is { name, parts: [{ liquid, amount }] } where `liquid` is a
 // liquid's stored name and `amount` is millilitres.
 
-import { InUseError } from "./references.js";
+import { InUseError, Referrers } from "./references.js";
+import { sameName, trimmedName } from "./names.js";
 import { alcoholMl, alcoholPercent, totalAmount } from "./alcohol.js";
 
 export class UnknownDrinkError extends Error {
@@ -29,12 +30,8 @@ export class InvalidDrinkError extends Error {
   }
 }
 
-function key(name) {
-  return String(name).trim().toLowerCase();
-}
-
 function validName(name) {
-  const trimmed = typeof name === "string" ? name.trim() : "";
+  const trimmed = trimmedName(name);
   if (trimmed === "") throw new InvalidDrinkError(name, "A drink needs a name.");
   return trimmed;
 }
@@ -53,7 +50,7 @@ export class Drinks {
   #store;
   #liquids;
   #changed;
-  #referrers = [];
+  #referrers = new Referrers();
 
   constructor(store, { liquids, changed }) {
     this.#store = store;
@@ -61,10 +58,9 @@ export class Drinks {
     this.#changed = changed;
   }
 
-  // A referrer uses drinks by name: `usesOf(name)` lists who uses one and
-  // `relabel(oldName, newName)` follows a rename.
+  // A referrer uses drinks by name; see Referrers.
   referredToBy(referrer) {
-    this.#referrers.push(referrer);
+    this.#referrers.add(referrer);
   }
 
   all() {
@@ -89,7 +85,7 @@ export class Drinks {
     const drink = this.#find(name);
     const trimmed = validName(newName);
     this.#refuseTaken(trimmed, drink);
-    for (const referrer of this.#referrers) referrer.relabel(drink.name, trimmed);
+    this.#referrers.relabel(drink.name, trimmed);
     drink.name = trimmed;
     this.#changed();
     return copy(drink);
@@ -97,7 +93,7 @@ export class Drinks {
 
   remove(name) {
     const drink = this.#find(name);
-    const users = this.#referrers.flatMap((referrer) => referrer.usesOf(drink.name));
+    const users = this.#referrers.usersOf(drink.name);
     if (users.length > 0) throw new InUseError(drink.name, users);
     this.#store.splice(this.#store.indexOf(drink), 1);
     this.#changed();
@@ -112,7 +108,7 @@ export class Drinks {
 
   removePart(name, liquid) {
     const drink = this.#find(name);
-    const index = drink.parts.findIndex((part) => key(part.liquid) === key(liquid));
+    const index = drink.parts.findIndex((part) => sameName(part.liquid, liquid));
     if (index === -1) throw new InvalidDrinkError(drink.name, `${drink.name} has no ${String(liquid).trim()}.`);
     drink.parts.splice(index, 1);
     this.#changed();
@@ -133,20 +129,20 @@ export class Drinks {
 
   // As a referrer of liquids: the drinks using a liquid, in store order.
   usesOf(liquid) {
-    return this.#store.filter((drink) => drink.parts.some((part) => key(part.liquid) === key(liquid))).map((drink) => drink.name);
+    return this.#store.filter((drink) => drink.parts.some((part) => sameName(part.liquid, liquid))).map((drink) => drink.name);
   }
 
   // As a referrer of liquids: follow a rename. The liquids service saves.
   relabel(from, to) {
     for (const drink of this.#store) {
-      for (const part of drink.parts) if (key(part.liquid) === key(from)) part.liquid = to;
+      for (const part of drink.parts) if (sameName(part.liquid, from)) part.liquid = to;
     }
   }
 
   #validPart(drink, { liquid, amount }) {
     validAmount(drink.name, amount);
     const stored = this.#liquids.get(liquid).name;
-    if (drink.parts.some((part) => key(part.liquid) === key(stored))) {
+    if (drink.parts.some((part) => sameName(part.liquid, stored))) {
       throw new InvalidDrinkError(drink.name, `${drink.name} already has ${stored}.`);
     }
     return { liquid: stored, amount };
@@ -160,13 +156,13 @@ export class Drinks {
   }
 
   #find(name) {
-    const drink = this.#store.find((candidate) => key(candidate.name) === key(name));
+    const drink = this.#store.find((candidate) => sameName(candidate.name, name));
     if (!drink) throw new UnknownDrinkError(String(name).trim());
     return drink;
   }
 
   #refuseTaken(name, except = null) {
-    const taken = this.#store.find((candidate) => candidate !== except && key(candidate.name) === key(name));
+    const taken = this.#store.find((candidate) => candidate !== except && sameName(candidate.name, name));
     if (taken) throw new DuplicateDrinkError(taken.name);
   }
 }

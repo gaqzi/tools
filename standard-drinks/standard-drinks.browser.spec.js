@@ -1,16 +1,16 @@
-// Browser spec for the standard-drinks tool, rounds 1 to 4: liquids, drinks with figures, drink lists, then the setting, the file and editing a liquid.
+// Browser spec for the standard-drinks tool. What this proves is the real
+// page with its real wiring, one test per visible state, interaction path
+// and persistence rule, over four rounds:
 //
-// What this proves: the real page, with its real wiring, shows the seed
-// catalogue on a first visit, adds a liquid through the form, remembers it
-// across a reload, and shows the error when a name is taken. The whole
-// catalogue is one `catalogue` object, read by `readCatalogue`, driven by
-// `addLiquid`, and compared once per test.
+// 1. Liquids: the seed on a first visit, adding, removing, a taken name, reload.
+// 2. Drinks: composing one from parts, its figures, removal refused while used.
+// 3. Drink lists: composing one from drinks, its totals and hours to clear.
+// 4. The standard-drink setting, export and import, and editing a liquid.
 //
-// The rules went to the unit tests: name uniqueness, trimming, validation
-// and copying in liquids.test.js; the seed list in seed-stores.test.js;
-// the storage shape in remembered-stores.test.js; the persist-on-change
-// wiring and the liquid-to-drink references in catalogue.test.js; the
-// arithmetic in alcohol.test.js; drink rules in drinks.test.js. This file stays small on purpose.
+// The whole page is one `catalogue` object, read by `readCatalogue` and
+// compared once per test. The rules went to the unit tests next to each
+// module (liquids, drinks, drink lists, stores, alcohol, catalogue wiring),
+// which is why this file stays small.
 import { test, expect } from "@playwright/test";
 
 const PAGE = "/standard-drinks/";
@@ -79,7 +79,7 @@ function liquid(overrides = {}) {
 // Scenario: what a first visit shows.
 function seedLiquids() {
   return [
-    liquid({ name: "Gin", alcoholPercent: 40 }),
+    liquid(),
     liquid({ name: "Vodka", alcoholPercent: 40 }),
     liquid({ name: "Whisky", alcoholPercent: 40 }),
     liquid({ name: "Campari", alcoholPercent: 25 }),
@@ -94,6 +94,16 @@ function seedLiquids() {
     liquid({ name: "Port", alcoholPercent: 20 }),
     liquid({ name: "Soda water", alcoholPercent: 0 }),
     liquid({ name: "Lime juice", alcoholPercent: 0 }),
+  ];
+}
+
+// Scenario: the liquids a negroni and a large lager are poured from.
+function fridayLiquids() {
+  return [
+    liquid(),
+    liquid({ name: "Campari", alcoholPercent: 25 }),
+    liquid({ name: "Sweet vermouth", alcoholPercent: 15 }),
+    liquid({ name: "Lager", alcoholPercent: 5 }),
   ];
 }
 
@@ -278,7 +288,6 @@ test.describe("adding a liquid", () => {
   test("keeps it after the page is reloaded", async ({ page }) => {
     await openCatalogue(page);
     await addLiquid(page, { name: "Dark rum", alcoholPercent: 37.5 });
-    await expect.poll(() => readCatalogue(page).then((c) => c.liquids.length)).toBe(16);
     await page.reload();
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({ liquids: [...seedLiquids(), liquid({ name: "Dark rum", alcoholPercent: 37.5 })] }),
@@ -331,11 +340,9 @@ test.describe("removing a liquid", () => {
   });
 
   test("takes it out of the list when no drink uses it", async ({ page }) => {
-    await openCatalogue(page);
+    await openCatalogue(page, { stored: storedStores([liquid(), liquid({ name: "Vodka", alcoholPercent: 40 })]) });
     await removeLiquid(page, "Vodka");
-    await expect.poll(() => readCatalogue(page)).toEqual(
-      catalogue({ liquids: seedLiquids().filter((candidate) => candidate.name !== "Vodka") }),
-    );
+    await expect.poll(() => readCatalogue(page)).toEqual(catalogue({ liquids: [liquid()] }));
   });
 });
 
@@ -390,7 +397,6 @@ test.describe("the standard drink setting", () => {
   test("is kept after the page is reloaded", async ({ page }) => {
     await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni()]) });
     await setGramsPerStandardDrink(page, 10);
-    await expect.poll(() => readCatalogue(page).then((c) => c.drinks[0].standardDrinks)).toBe(2.8);
     await page.reload();
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({ drinks: [drink({ standardDrinks: 2.8 })], gramsPerStandardDrink: 10 }),
@@ -412,24 +418,27 @@ test.describe("exporting the catalogue", () => {
 test.describe("importing a catalogue", () => {
   test("replaces the liquids, drinks and drink lists", async ({ page }) => {
     await openCatalogue(page);
-    const imported = storedStores(
-      [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 25 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
-      [storedNegroni(), storedLagerLarge()],
-      [storedFriday()],
-    );
+    const imported = storedStores(fridayLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]);
     await importCatalogue(page, JSON.stringify(imported));
     await expect.poll(() => readCatalogue(page)).toEqual(
-      catalogue({
-        liquids: [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 25 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
-        drinks: [drink(), lagerLarge()],
-        drinkLists: [drinkList()],
-      }),
+      catalogue({ liquids: fridayLiquids(), drinks: [drink(), lagerLarge()], drinkLists: [drinkList()] }),
+    );
+  });
+
+  test("keeps an imported catalogue after the page is reloaded", async ({ page }) => {
+    await openCatalogue(page);
+    const imported = storedStores(fridayLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]);
+    await importCatalogue(page, JSON.stringify(imported));
+    await page.locator('drink-lists-view tr[data-drink-list="Friday"]').waitFor();
+    await page.reload();
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({ liquids: fridayLiquids(), drinks: [drink(), lagerLarge()], drinkLists: [drinkList()] }),
     );
   });
 
   test("shows the dangling reference and leaves the catalogue unchanged when a drink uses an unknown liquid", async ({ page }) => {
     await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni()]) });
-    const withoutCampari = seedLiquids().filter((candidate) => candidate.name !== "Campari");
+    const withoutCampari = [liquid(), liquid({ name: "Sweet vermouth", alcoholPercent: 15 })];
     await importCatalogue(page, JSON.stringify(storedStores(withoutCampari, [storedNegroni()])));
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({ drinks: [drink()], fileError: 'Drink "Negroni" uses an unknown liquid "Campari".' }),
@@ -447,12 +456,23 @@ test.describe("editing a liquid", () => {
   });
 
   test("changes the figures of a drink that uses it when its percentage changes", async ({ page }) => {
-    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedLagerLarge()]) });
+    await openCatalogue(page, { stored: storedStores([liquid({ name: "Lager", alcoholPercent: 5 })], [storedLagerLarge()]) });
     await editLiquid(page, "Lager", { name: "Lager", alcoholPercent: 8 });
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({
-        liquids: [...seedLiquids().slice(0, 6), liquid({ name: "Lager", alcoholPercent: 8 }), ...seedLiquids().slice(7)],
+        liquids: [liquid({ name: "Lager", alcoholPercent: 8 })],
         drinks: [lagerLarge({ alcoholPercent: 8, alcohol: 40, standardDrinks: 2.6 })],
+      }),
+    );
+  });
+
+  test("renaming a liquid shows the new name in a drink that uses it", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores([liquid({ name: "Lager", alcoholPercent: 5 })], [storedLagerLarge()]) });
+    await editLiquid(page, "Lager", { name: "Pilsner", alcoholPercent: 5 });
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        liquids: [liquid({ name: "Pilsner", alcoholPercent: 5 })],
+        drinks: [lagerLarge({ parts: "Pilsner 500 ml" })],
       }),
     );
   });

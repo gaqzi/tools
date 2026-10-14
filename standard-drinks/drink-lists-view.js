@@ -63,15 +63,14 @@ class DrinkListsView extends HTMLElement {
   #row({ name, entries }, drinkNames) {
     const amount = this.#drinkLists.amountOf(name);
     const alcohol = this.#drinkLists.alcoholOf(name);
-    const percent = amount === 0 ? 0 : (alcohol / amount) * 100;
     const standard = standardDrinks(gramsOfAlcohol(alcohol), this.#settings);
     const tr = document.createElement("tr");
     tr.dataset.drinkList = name;
     tr.append(
       cell("name", name),
       cell("entries", entries.map(({ drink, quantity }) => `${quantity} × ${drink}`).join(", ")),
-      cell("amount", `${amount} ml`),
-      cell("alcohol-percent", `${oneDecimal(percent)} %`),
+      cell("amount", `${oneDecimal(amount)} ml`),
+      cell("alcohol-percent", `${oneDecimal(this.#drinkLists.alcoholPercentOf(name))} %`),
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
       cell("standard-drinks", oneDecimal(standard)),
       cell("hours-to-clear", `${oneDecimal(hoursToClear(standard))} h`),

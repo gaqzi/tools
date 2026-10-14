@@ -1,12 +1,14 @@
 // The only module that touches localStorage, and only via its default argument.
 
+import { validateStores } from "./stores.js";
+
 export const STORAGE_KEY = "standard-drinks";
 
 export function recallStores(storage = globalThis.localStorage) {
   const raw = storage.getItem(STORAGE_KEY);
   if (raw === null) return null;
   try {
-    return JSON.parse(raw);
+    return validateStores(JSON.parse(raw));
   } catch {
     return null;
   }

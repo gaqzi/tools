@@ -1,8 +1,6 @@
 // The arithmetic of drinks: volumes, strengths, grams and standard drinks.
 // A part is { alcoholPercent, amount } with the amount in millilitres.
 
-export const GRAMS_PER_STANDARD_DRINK = 12;
-
 const GRAMS_PER_ML_OF_ALCOHOL = 0.789;
 
 export function totalAmount(parts) {
@@ -22,7 +20,7 @@ export function gramsOfAlcohol(ml) {
   return ml * GRAMS_PER_ML_OF_ALCOHOL;
 }
 
-export function standardDrinks(grams, { gramsPerStandardDrink = GRAMS_PER_STANDARD_DRINK } = {}) {
+export function standardDrinks(grams, { gramsPerStandardDrink }) {
   return grams / gramsPerStandardDrink;
 }
 

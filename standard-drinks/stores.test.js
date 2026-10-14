@@ -98,6 +98,84 @@ describe("validating stores", () => {
     });
   }
 
+  const refused = [
+    {
+      name: "two liquids share a name trimmed and in another casing",
+      stores: catalogue({ liquids: [liquid(), liquid({ name: "gin " })] }),
+      message: 'Liquid "gin " duplicates "Gin".',
+    },
+    {
+      name: "two drinks share a name trimmed and in another casing",
+      stores: catalogue({ drinks: [drink(), drink({ name: " NEGRONI" })] }),
+      message: 'Drink " NEGRONI" duplicates "Negroni".',
+    },
+    {
+      name: "two drink lists share a name trimmed and in another casing",
+      stores: catalogue({ drinkLists: [drinkList(), drinkList({ name: "friday" })] }),
+      message: 'Drink list "friday" duplicates "Friday".',
+    },
+    {
+      name: "a liquid has a blank name",
+      stores: catalogue({ liquids: [liquid(), liquid({ name: "  " })] }),
+      message: 'Liquid "  " has a blank name.',
+    },
+    {
+      name: "a drink has a blank name",
+      stores: catalogue({ drinks: [drink(), drink({ name: "" })] }),
+      message: 'Drink "" has a blank name.',
+    },
+    {
+      name: "a drink list has a blank name",
+      stores: catalogue({ drinkLists: [drinkList(), drinkList({ name: " " })] }),
+      message: 'Drink list " " has a blank name.',
+    },
+    {
+      name: "a liquid is stronger than 100 %",
+      stores: catalogue({ liquids: [liquid({ alcoholPercent: 100.5 })] }),
+      message: 'Liquid "Gin" has an alcohol percentage outside 0 to 100.',
+    },
+    {
+      name: "a liquid is weaker than 0 %",
+      stores: catalogue({ liquids: [liquid({ alcoholPercent: -1 })] }),
+      message: 'Liquid "Gin" has an alcohol percentage outside 0 to 100.',
+    },
+    {
+      name: "a part has an amount of 0",
+      stores: catalogue({ drinks: [drink({ parts: [part({ amount: 0 })] })] }),
+      message: 'Drink "Negroni" has a part with an amount that is not above 0.',
+    },
+    {
+      name: "a part has a negative amount",
+      stores: catalogue({ drinks: [drink({ parts: [part({ amount: -45 })] })] }),
+      message: 'Drink "Negroni" has a part with an amount that is not above 0.',
+    },
+    {
+      name: "a drink uses the same liquid twice",
+      stores: catalogue({ drinks: [drink({ parts: [part(), part({ liquid: "gin" })] })] }),
+      message: 'Drink "Negroni" uses the liquid "gin" more than once.',
+    },
+    {
+      name: "an entry has a fractional quantity",
+      stores: catalogue({ drinkLists: [drinkList({ entries: [entry({ quantity: 1.5 })] })] }),
+      message: 'Drink list "Friday" has an entry with a quantity that is not a whole number of 1 or more.',
+    },
+    {
+      name: "an entry has a quantity of 0",
+      stores: catalogue({ drinkLists: [drinkList({ entries: [entry({ quantity: 0 })] })] }),
+      message: 'Drink list "Friday" has an entry with a quantity that is not a whole number of 1 or more.',
+    },
+    {
+      name: "a drink list uses the same drink twice",
+      stores: catalogue({ drinkLists: [drinkList({ entries: [entry(), entry({ drink: "negroni " })] })] }),
+      message: 'Drink list "Friday" uses the drink "negroni " more than once.',
+    },
+  ];
+  for (const { name, stores, message } of refused) {
+    it(`refuses and names the problem when ${name}`, () => {
+      assert.deepEqual(rejection(stores), invalid(message));
+    });
+  }
+
   const malformed = [
     { name: "is not an object", stores: "gin" },
     { name: "is null", stores: null },

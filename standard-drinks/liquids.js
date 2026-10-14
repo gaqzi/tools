@@ -1,6 +1,7 @@
 // The liquids a user can mix drinks from: unique names, alcohol percentages.
 
-import { InUseError } from "./references.js";
+import { InUseError, Referrers } from "./references.js";
+import { sameName, trimmedName } from "./names.js";
 
 export class DuplicateLiquidError extends Error {
   constructor(liquid) {
@@ -26,12 +27,8 @@ export class UnknownLiquidError extends Error {
   }
 }
 
-function key(name) {
-  return String(name).trim().toLowerCase();
-}
-
 function validName(name) {
-  const trimmed = typeof name === "string" ? name.trim() : "";
+  const trimmed = trimmedName(name);
   if (trimmed === "") throw new InvalidLiquidError(name, "A liquid needs a name.");
   return trimmed;
 }
@@ -45,17 +42,16 @@ function validPercent(name, alcoholPercent) {
 export class Liquids {
   #store;
   #changed;
-  #referrers = [];
+  #referrers = new Referrers();
 
   constructor(store, { changed }) {
     this.#store = store;
     this.#changed = changed;
   }
 
-  // A referrer uses liquids by name: `usesOf(name)` lists who uses one and
-  // `relabel(oldName, newName)` follows a rename.
+  // A referrer uses liquids by name; see Referrers.
   referredToBy(referrer) {
-    this.#referrers.push(referrer);
+    this.#referrers.add(referrer);
   }
 
   all() {
@@ -87,7 +83,7 @@ export class Liquids {
     const liquid = this.#find(name);
     const trimmed = validName(newName);
     this.#refuseTaken(trimmed, liquid);
-    for (const referrer of this.#referrers) referrer.relabel(liquid.name, trimmed);
+    this.#referrers.relabel(liquid.name, trimmed);
     liquid.name = trimmed;
     this.#changed();
     return { ...liquid };
@@ -95,20 +91,20 @@ export class Liquids {
 
   remove(name) {
     const liquid = this.#find(name);
-    const users = this.#referrers.flatMap((referrer) => referrer.usesOf(liquid.name));
+    const users = this.#referrers.usersOf(liquid.name);
     if (users.length > 0) throw new InUseError(liquid.name, users);
     this.#store.splice(this.#store.indexOf(liquid), 1);
     this.#changed();
   }
 
   #find(name) {
-    const liquid = this.#store.find((candidate) => key(candidate.name) === key(name));
+    const liquid = this.#store.find((candidate) => sameName(candidate.name, name));
     if (!liquid) throw new UnknownLiquidError(String(name).trim());
     return liquid;
   }
 
   #refuseTaken(name, except = null) {
-    const taken = this.#store.find((candidate) => candidate !== except && key(candidate.name) === key(name));
+    const taken = this.#store.find((candidate) => candidate !== except && sameName(candidate.name, name));
     if (taken) throw new DuplicateLiquidError(taken.name);
   }
 }

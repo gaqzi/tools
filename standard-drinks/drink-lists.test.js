@@ -67,8 +67,8 @@ function drinksMock(configured) {
 }
 
 // Builds the service over the night's lists and returns it with an observer of
-// the whole state. `saves` and `changes` come from the changed callback's call
-// count: "save exactly once per mutation, never for a read" has no other
+// the whole state. `saves` is the changed callback's call
+// count:"save exactly once per mutation, never for a read" has no other
 // output, so the count is the only way to observe that contract.
 function open(initial = night(), configured = answers()) {
   const store = structuredClone(initial.drinkLists);
@@ -452,13 +452,27 @@ describe("computing the totals of a drink list from its drinks", () => {
     assert.equal(read().saves, 0);
   });
 
-  for (const method of ["amountOf", "alcoholOf"]) {
+  for (const method of ["amountOf", "alcoholOf", "alcoholPercentOf"]) {
     it(`${method} refuses an unknown drink list`, () => {
       const { service } = open();
 
       assert.ok(caught(() => service[method]("Sunday")) instanceof UnknownDrinkListError);
     });
   }
+});
+
+describe("computing the alcohol percentage of a drink list", () => {
+  it("puts two negronis and a large lager at 12.4 %", () => {
+    const { service } = open();
+
+    assert.equal(round(service.alcoholPercentOf("Friday")), 12.4);
+  });
+
+  it("puts a list with no entries at 0 %", () => {
+    const { service } = open(night({ drinkLists: [{ name: "Empty", entries: [] }] }), {});
+
+    assert.equal(service.alcoholPercentOf("Empty"), 0);
+  });
 });
 
 describe("being a referrer of drinks", () => {

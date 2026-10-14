@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  GRAMS_PER_STANDARD_DRINK,
   totalAmount,
   alcoholMl,
   alcoholPercent,
@@ -72,16 +71,12 @@ describe("turning millilitres of alcohol into standard drinks", () => {
     assert.equal(round(gramsOfAlcohol(35.1)), 27.7);
   });
 
-  it("counts 27.7 grams as 2.3 standard drinks by default", () => {
-    assert.equal(round(standardDrinks(27.7)), 2.3);
+  it("counts 27.7 grams as 2.3 standard drinks when one is 12 grams", () => {
+    assert.equal(round(standardDrinks(27.7, { gramsPerStandardDrink: 12 })), 2.3);
   });
 
   it("counts 27.7 grams as 2.8 standard drinks when one is 10 grams", () => {
     assert.equal(round(standardDrinks(27.7, { gramsPerStandardDrink: 10 })), 2.8);
-  });
-
-  it("defaults a standard drink to 12 grams", () => {
-    assert.equal(GRAMS_PER_STANDARD_DRINK, 12);
   });
 });
 

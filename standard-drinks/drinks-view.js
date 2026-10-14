@@ -66,7 +66,7 @@ class DrinksView extends HTMLElement {
     tr.append(
       cell("name", name),
       cell("parts", parts.map(({ liquid, amount }) => `${liquid} ${amount} ml`).join(", ")),
-      cell("amount", `${this.#drinks.amountOf(name)} ml`),
+      cell("amount", `${oneDecimal(this.#drinks.amountOf(name))} ml`),
       cell("alcohol-percent", `${oneDecimal(this.#drinks.alcoholPercentOf(name))} %`),
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
       cell("standard-drinks", oneDecimal(standardDrinks(gramsOfAlcohol(alcohol), this.#settings))),

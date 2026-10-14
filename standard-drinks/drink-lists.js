@@ -2,6 +2,8 @@
 // A drink list is { name, entries: [{ drink, quantity }] } where `drink` is a
 // drink's stored name and `quantity` a whole number of servings.
 
+import { sameName, trimmedName } from "./names.js";
+
 export class UnknownDrinkListError extends Error {
   constructor(drinkList) {
     super(`There is no drink list named "${drinkList}".`);
@@ -26,12 +28,8 @@ export class InvalidDrinkListError extends Error {
   }
 }
 
-function key(name) {
-  return String(name).trim().toLowerCase();
-}
-
 function validName(name) {
-  const trimmed = typeof name === "string" ? name.trim() : "";
+  const trimmed = trimmedName(name);
   if (trimmed === "") throw new InvalidDrinkListError(name, "A drink list needs a name.");
   return trimmed;
 }
@@ -100,7 +98,7 @@ export class DrinkLists {
 
   removeEntry(name, drink) {
     const drinkList = this.#find(name);
-    const index = drinkList.entries.findIndex((entry) => key(entry.drink) === key(drink));
+    const index = drinkList.entries.findIndex((entry) => sameName(entry.drink, drink));
     if (index === -1) {
       throw new InvalidDrinkListError(drinkList.name, `${drinkList.name} has no ${String(drink).trim()}.`);
     }
@@ -117,35 +115,40 @@ export class DrinkLists {
     return this.#find(name).entries.reduce((sum, { drink, quantity }) => sum + quantity * this.#drinks.alcoholOf(drink), 0);
   }
 
+  alcoholPercentOf(name) {
+    const amount = this.amountOf(name);
+    return amount === 0 ? 0 : (this.alcoholOf(name) / amount) * 100;
+  }
+
   // As a referrer of drinks: the drink lists using a drink, in store order.
   usesOf(drink) {
-    return this.#store.filter((drinkList) => drinkList.entries.some((entry) => key(entry.drink) === key(drink))).map((drinkList) => drinkList.name);
+    return this.#store.filter((drinkList) => drinkList.entries.some((entry) => sameName(entry.drink, drink))).map((drinkList) => drinkList.name);
   }
 
   // As a referrer of drinks: follow a rename. The drinks service saves.
   relabel(from, to) {
     for (const drinkList of this.#store) {
-      for (const entry of drinkList.entries) if (key(entry.drink) === key(from)) entry.drink = to;
+      for (const entry of drinkList.entries) if (sameName(entry.drink, from)) entry.drink = to;
     }
   }
 
   #validEntry(drinkList, { drink, quantity }) {
     validQuantity(drinkList.name, quantity);
     const stored = this.#drinks.get(drink).name;
-    if (drinkList.entries.some((entry) => key(entry.drink) === key(stored))) {
+    if (drinkList.entries.some((entry) => sameName(entry.drink, stored))) {
       throw new InvalidDrinkListError(drinkList.name, `${drinkList.name} already has ${stored}.`);
     }
     return { drink: stored, quantity };
   }
 
   #find(name) {
-    const drinkList = this.#store.find((candidate) => key(candidate.name) === key(name));
+    const drinkList = this.#store.find((candidate) => sameName(candidate.name, name));
     if (!drinkList) throw new UnknownDrinkListError(String(name).trim());
     return drinkList;
   }
 
   #refuseTaken(name, except = null) {
-    const taken = this.#store.find((candidate) => candidate !== except && key(candidate.name) === key(name));
+    const taken = this.#store.find((candidate) => candidate !== except && sameName(candidate.name, name));
     if (taken) throw new DuplicateDrinkListError(taken.name);
   }
 }

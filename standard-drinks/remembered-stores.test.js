@@ -1,8 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  STORAGE_KEY,
-  SETTINGS_KEY,
   DEFAULT_SETTINGS,
   recallStores,
   rememberStores,
@@ -23,9 +21,17 @@ function stores(overrides = {}) {
   return { liquids: [{ name: "Gin", alcoholPercent: 40 }], drinks: [], drinkLists: [], ...overrides };
 }
 
-describe("the key the stores are remembered under", () => {
-  it("is standard-drinks", () => {
-    assert.equal(STORAGE_KEY, "standard-drinks");
+function settings(overrides = {}) {
+  return { gramsPerStandardDrink: 12, ...overrides };
+}
+
+describe("remembering the default stores and settings", () => {
+  it("recalls the same stores and settings", () => {
+    const storage = fakeStorage();
+    rememberStores(stores(), storage);
+    rememberSettings(settings(), storage);
+
+    assert.deepEqual({ stores: recallStores(storage), settings: recallSettings(storage) }, { stores: stores(), settings: settings() });
   });
 });
 
@@ -38,11 +44,8 @@ describe("recalling stores", () => {
     assert.equal(recallStores(fakeStorage({ "standard-drinks": "{not json" })), null);
   });
 
-  it("gives back the stores that were remembered", () => {
-    const storage = fakeStorage();
-    rememberStores(stores(), storage);
-
-    assert.deepEqual(recallStores(storage), stores());
+  it("finds nothing when the stored value is not a valid catalogue", () => {
+    assert.equal(recallStores(fakeStorage({ "standard-drinks": '{"liquids":"gin","drinks":[],"drinkLists":[]}' })), null);
   });
 });
 
@@ -55,16 +58,6 @@ describe("remembering stores", () => {
       storage.getItem("standard-drinks"),
       '{"liquids":[{"name":"Gin","alcoholPercent":40}],"drinks":[],"drinkLists":[]}',
     );
-  });
-});
-
-function settings(overrides = {}) {
-  return { gramsPerStandardDrink: 12, ...overrides };
-}
-
-describe("the key the settings are remembered under", () => {
-  it("is standard-drinks-settings", () => {
-    assert.equal(SETTINGS_KEY, "standard-drinks-settings");
   });
 });
 
