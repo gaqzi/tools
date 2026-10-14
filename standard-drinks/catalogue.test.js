@@ -65,3 +65,42 @@ describe("a catalogue whose drinks refer to its liquids", () => {
     assert.equal(error?.message, '"Gin" is used by Gimlet.');
   });
 });
+
+describe("a catalogue whose drink lists refer to its drinks", () => {
+  function withNegroniOnFriday() {
+    const opened = open();
+    opened.catalogue.drinks.add({ name: "Negroni", parts: [{ liquid: "Gin", amount: 45 }] });
+    opened.catalogue.drinkLists.add({ name: "Friday", entries: [{ drink: "negroni", quantity: 2 }] });
+    return opened;
+  }
+
+  it("shows a renamed drink in the entry of the list that uses it", () => {
+    const { catalogue } = withNegroniOnFriday();
+    catalogue.drinks.rename("Negroni", "Boulevardier");
+
+    assert.deepEqual(catalogue.drinkLists.get("Friday"), {
+      name: "Friday",
+      entries: [{ drink: "Boulevardier", quantity: 2 }],
+    });
+  });
+
+  it("refuses to remove a drink a list uses", () => {
+    const { catalogue } = withNegroniOnFriday();
+    const error = (() => {
+      try {
+        catalogue.drinks.remove("Negroni");
+      } catch (caught) {
+        return caught;
+      }
+    })();
+
+    assert.equal(error?.message, '"Negroni" is used by Friday.');
+  });
+
+  it("remembers the stores, now holding the list, when one is added", () => {
+    const { catalogue, remembered } = open();
+    catalogue.drinkLists.add({ name: "Friday" });
+
+    assert.deepEqual(remembered, [stores({ drinkLists: [{ name: "Friday", entries: [] }] })]);
+  });
+});

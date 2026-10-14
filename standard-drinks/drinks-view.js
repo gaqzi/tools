@@ -58,6 +58,9 @@ class DrinksView extends HTMLElement {
     const alcohol = this.#drinks.alcoholOf(name);
     const tr = document.createElement("tr");
     tr.dataset.drink = name;
+    const remove = button({ type: "button", className: "remove", textContent: "Remove" });
+    remove.setAttribute("aria-label", `Remove ${name}`);
+    remove.addEventListener("click", () => this.#attempt(() => this.#drinks.remove(name)));
     tr.append(
       cell("name", name),
       cell("parts", parts.map(({ liquid, amount }) => `${liquid} ${amount} ml`).join(", ")),
@@ -66,6 +69,7 @@ class DrinksView extends HTMLElement {
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
       cell("standard-drinks", oneDecimal(standardDrinks(gramsOfAlcohol(alcohol)))),
       cell("add-part-cell", this.#addPartForm(name, liquidNames)),
+      cell("actions", remove),
     );
     return tr;
   }

@@ -1,4 +1,4 @@
-// Browser spec for the standard-drinks tool, rounds 1 and 2: liquids, then drinks with figures.
+// Browser spec for the standard-drinks tool, rounds 1 to 3: liquids, drinks with figures, then drink lists.
 //
 // What this proves: the real page, with its real wiring, shows the seed
 // catalogue on a first visit, adds a liquid through the form, remembers it
@@ -19,7 +19,7 @@ const STORAGE_KEY = "standard-drinks";
 // --- The catalogue state ---
 
 function catalogue(overrides = {}) {
-  return { liquids: seedLiquids(), drinks: [], error: "", drinksError: "", ...overrides };
+  return { liquids: seedLiquids(), drinks: [], drinkLists: [], error: "", drinksError: "", drinkListsError: "", ...overrides };
 }
 
 // Scenario: the negroni as the page shows it, parts as one text.
@@ -31,6 +31,33 @@ function drink(overrides = {}) {
     alcoholPercent: 26,
     alcohol: 35.1,
     standardDrinks: 2.3,
+    ...overrides,
+  };
+}
+
+// Scenario: the large lager as the page shows it.
+function lagerLarge(overrides = {}) {
+  return drink({
+    name: "Lager large",
+    parts: "Lager 500 ml",
+    amount: 500,
+    alcoholPercent: 5,
+    alcohol: 25,
+    standardDrinks: 1.6,
+    ...overrides,
+  });
+}
+
+// Scenario: Friday as the page shows it, two negronis and a large lager.
+function drinkList(overrides = {}) {
+  return {
+    name: "Friday",
+    entries: "2 × Negroni, 1 × Lager large",
+    amount: 770,
+    alcoholPercent: 12.4,
+    alcohol: 95.2,
+    standardDrinks: 6.3,
+    hoursToClear: 6.3,
     ...overrides,
   };
 }
@@ -61,8 +88,8 @@ function seedLiquids() {
 }
 
 // Scenario: a stored catalogue in the exact shape localStorage holds.
-function storedStores(liquids, drinks = []) {
-  return { liquids, drinks, drinkLists: [] };
+function storedStores(liquids, drinks = [], drinkLists = []) {
+  return { liquids, drinks, drinkLists };
 }
 
 // Scenario: the negroni in the exact shape localStorage holds.
@@ -73,6 +100,22 @@ function storedNegroni() {
       { liquid: "Campari", amount: 45 },
       { liquid: "Gin", amount: 45 },
       { liquid: "Sweet vermouth", amount: 45 },
+    ],
+  };
+}
+
+// Scenario: the large lager in the exact shape localStorage holds.
+function storedLagerLarge() {
+  return { name: "Lager large", parts: [{ liquid: "Lager", amount: 500 }] };
+}
+
+// Scenario: Friday in the exact shape localStorage holds.
+function storedFriday() {
+  return {
+    name: "Friday",
+    entries: [
+      { drink: "Negroni", quantity: 2 },
+      { drink: "Lager large", quantity: 1 },
     ],
   };
 }
@@ -96,8 +139,21 @@ function readCatalogue(page) {
         standardDrinks: parseFloat(text(".standard-drinks")),
       };
     }),
+    drinkLists: [...document.querySelectorAll("drink-lists-view tr[data-drink-list]")].map((row) => {
+      const text = (selector) => row.querySelector(selector).textContent.trim();
+      return {
+        name: text(".name"),
+        entries: text(".entries"),
+        amount: parseFloat(text(".amount")),
+        alcoholPercent: parseFloat(text(".alcohol-percent")),
+        alcohol: parseFloat(text(".alcohol")),
+        standardDrinks: parseFloat(text(".standard-drinks")),
+        hoursToClear: parseFloat(text(".hours-to-clear")),
+      };
+    }),
     error: document.querySelector("liquids-view .error")?.textContent.trim() ?? "",
     drinksError: document.querySelector("drinks-view .error")?.textContent.trim() ?? "",
+    drinkListsError: document.querySelector("drink-lists-view .error")?.textContent.trim() ?? "",
   }));
 }
 
@@ -119,6 +175,23 @@ async function addPart(page, drinkName, { liquid, amount }) {
   await form.locator("select[name=liquid]").selectOption({ label: liquid });
   await form.locator("input[name=amount]").fill(String(amount));
   await form.locator("[type=submit], button:not([type])").first().click();
+}
+
+async function addDrinkList(page, name) {
+  const form = page.locator("form.add-drink-list");
+  await form.locator("input[name=name]").fill(name);
+  await form.locator("[type=submit], button:not([type])").first().click();
+}
+
+async function addEntry(page, listName, { drink, quantity }) {
+  const form = page.locator(`tr[data-drink-list="${listName}"] form.add-entry`);
+  await form.locator("select[name=drink]").selectOption({ label: drink });
+  await form.locator("input[name=quantity]").fill(String(quantity));
+  await form.locator("[type=submit], button:not([type])").first().click();
+}
+
+async function removeDrink(page, name) {
+  await page.locator(`drinks-view tr[data-drink="${name}"] button.remove`).click();
 }
 
 async function removeLiquid(page, name) {
@@ -218,6 +291,45 @@ test.describe("removing a liquid", () => {
     await removeLiquid(page, "Vodka");
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({ liquids: seedLiquids().filter((candidate) => candidate.name !== "Vodka") }),
+    );
+  });
+});
+
+test.describe("composing a drink list", () => {
+  test("shows a list of two negronis and a large lager with its totals", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()]) });
+    await addDrinkList(page, "Friday");
+    await addEntry(page, "Friday", { drink: "Negroni", quantity: 2 });
+    await addEntry(page, "Friday", { drink: "Lager large", quantity: 1 });
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({ drinks: [drink(), lagerLarge()], drinkLists: [drinkList()] }),
+    );
+  });
+});
+
+test.describe("opening the catalogue with a drink list already stored", () => {
+  test("shows the stored list with its totals", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({ drinks: [drink(), lagerLarge()], drinkLists: [drinkList()] }),
+    );
+  });
+});
+
+test.describe("removing a drink", () => {
+  test("shows which list uses it and leaves the drinks and lists unchanged", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await removeDrink(page, "Negroni");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink(), lagerLarge()],
+        drinkLists: [drinkList()],
+        drinksError: '"Negroni" is used by Friday.',
+      }),
     );
   });
 });

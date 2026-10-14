@@ -7,6 +7,7 @@ import {
   UnknownDrinkError,
 } from "./drinks.js";
 import { UnknownLiquidError } from "./liquids.js";
+import { InUseError } from "./references.js";
 
 // --- The state: the store's drinks and how many times the service said it changed ---
 
@@ -86,10 +87,11 @@ function liquidsMock(configured) {
 // the whole state. `saves` is read from the changed callback's call count:
 // "save exactly once per mutation, never for a read" has no other output, so
 // the count is the only way to observe that contract.
-function open(initial = bar(), configured = answers()) {
+function open(initial = bar(), configured = answers(), { referrers = [] } = {}) {
   const store = structuredClone(initial.drinks);
   let saves = 0;
   const service = new Drinks(store, { liquids: liquidsMock(configured), changed: () => (saves += 1) });
+  for (const referrer of referrers) service.referredToBy(referrer);
   return { service, read: () => ({ drinks: service.all(), saves }) };
 }
 
@@ -516,5 +518,120 @@ describe("being a referrer of liquids", () => {
       read(),
       bar({ drinks: [negroni(), martini({ parts: [part({ amount: 60 }), dryVermouthPart({ liquid: "Extra dry" })] })] }),
     );
+  });
+});
+
+// --- Referrers: things that use drinks by name, such as drink lists ---
+
+// A referrer mock is a plain object with only the methods the test configures,
+// so calling anything else throws. `uses` maps a stored drink name to the
+// names using it; asking about any other name throws.
+function usingReferrer(uses) {
+  return {
+    usesOf(name) {
+      if (!(name in uses)) throw new Error(`unconfigured usesOf(${name})`);
+      return uses[name];
+    },
+  };
+}
+
+// A relabelling referrer appends each relabel call to the given list.
+// Reading it back is the last resort: relabelling has no other output in the
+// drinks service, since the referrer owns the data being rewritten, so the
+// recorded calls are the only way to observe that every referrer was told.
+function relabellingReferrer(relabelled) {
+  return {
+    relabel(from, to) {
+      relabelled.push({ from, to });
+    },
+  };
+}
+
+function relabelling(overrides = {}) {
+  return { from: "Negroni", to: "Boulevardier", ...overrides };
+}
+
+function inUse(error) {
+  return { name: error.name, item: error.item, users: error.users };
+}
+
+describe("renaming a drink that referrers use", () => {
+  it("tells every referrer the stored old name and the trimmed new name, then saves once", () => {
+    const first = [];
+    const second = [];
+    const { service, read } = open(bar(), answers(), {
+      referrers: [relabellingReferrer(first), relabellingReferrer(second)],
+    });
+    service.rename("negroni", "  Boulevardier ");
+
+    assert.deepEqual(
+      { ...read(), relabelled: [first, second] },
+      { ...bar({ drinks: [negroni({ name: "Boulevardier" }), martini()], saves: 1 }), relabelled: [[relabelling()], [relabelling()]] },
+    );
+  });
+
+  it("tells no referrer and does not save when the rename is refused", () => {
+    const relabelled = [];
+    const { service, read } = open(bar(), answers(), { referrers: [relabellingReferrer(relabelled)] });
+    const refused = refusal(() => service.rename("Negroni", "martini"));
+
+    assert.deepEqual({ ...read(), relabelled, refused }, { ...bar(), relabelled: [], refused: "DuplicateDrinkError" });
+  });
+});
+
+describe("removing a drink that referrers use", () => {
+  it("refuses with the stored drink name and every user, in referrer order", () => {
+    const { service } = open(bar(), answers(), {
+      referrers: [usingReferrer({ Negroni: ["Friday", "Saturday"] }), usingReferrer({ Negroni: ["Sunday"] })],
+    });
+
+    assert.deepEqual(inUse(caught(() => service.remove(" negroni"))), {
+      name: "InUseError",
+      item: "Negroni",
+      users: ["Friday", "Saturday", "Sunday"],
+    });
+  });
+
+  it("is an InUseError", () => {
+    const { service } = open(bar(), answers(), { referrers: [usingReferrer({ Negroni: ["Friday"] })] });
+
+    assert.ok(caught(() => service.remove("Negroni")) instanceof InUseError);
+  });
+
+  it("refuses when only a later referrer uses it", () => {
+    const { service } = open(bar(), answers(), {
+      referrers: [usingReferrer({ Negroni: [] }), usingReferrer({ Negroni: ["Sunday"] })],
+    });
+
+    assert.deepEqual(inUse(caught(() => service.remove("Negroni"))), {
+      name: "InUseError",
+      item: "Negroni",
+      users: ["Sunday"],
+    });
+  });
+
+  it("leaves the store alone and does not save when it refuses", () => {
+    const { service, read } = open(bar(), answers(), { referrers: [usingReferrer({ Negroni: ["Friday"] })] });
+    const refused = refusal(() => service.remove("Negroni"));
+
+    assert.deepEqual({ ...read(), refused }, { ...bar(), refused: "InUseError" });
+  });
+
+  it("removes it and saves once when no referrer uses it", () => {
+    const { service, read } = open(bar(), answers(), {
+      referrers: [usingReferrer({ Negroni: [] }), usingReferrer({ Negroni: [] })],
+    });
+    service.remove(" NEGRONI");
+
+    assert.deepEqual(read(), bar({ drinks: [martini()], saves: 1 }));
+  });
+});
+
+describe("a drinks service that no referrer has been registered with", () => {
+  it("removes a drink as before", () => {
+    const { service, read } = open();
+    service.remove("Negroni");
+
+    assert.deepEqual(read(), bar({ drinks: [martini()], saves: 1 }));
   });
 });

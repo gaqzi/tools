@@ -7,6 +7,7 @@ import {
   alcoholPercent,
   gramsOfAlcohol,
   standardDrinks,
+  hoursToClear,
 } from "./alcohol.js";
 
 // --- The parts of a drink: a liquid's strength and how much of it is poured ---
@@ -81,5 +82,15 @@ describe("turning millilitres of alcohol into standard drinks", () => {
 
   it("defaults a standard drink to 12 grams", () => {
     assert.equal(GRAMS_PER_STANDARD_DRINK, 12);
+  });
+});
+
+describe("estimating the hours until an average person is clear", () => {
+  it("takes one hour per standard drink, so 2.3 standard drinks take 2.3 hours", () => {
+    assert.equal(hoursToClear(2.3), 2.3);
+  });
+
+  it("takes no time for no standard drinks", () => {
+    assert.equal(hoursToClear(0), 0);
   });
 });

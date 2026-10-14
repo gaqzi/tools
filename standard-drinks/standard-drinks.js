@@ -3,6 +3,7 @@
 
 import "./liquids-view.js";
 import "./drinks-view.js";
+import "./drink-lists-view.js";
 import { seedStores } from "./seed-stores.js";
 import { recallStores, rememberStores } from "./remembered-stores.js";
 import { createCatalogue } from "./catalogue.js";
@@ -14,10 +15,13 @@ class StandardDrinks extends HTMLElement {
     const liquidsView = this.querySelector("liquids-view");
     const drinksView = this.querySelector("drinks-view");
     liquidsView.liquids = catalogue.liquids;
+    const drinkListsView = this.querySelector("drink-lists-view");
     drinksView.show(catalogue);
+    drinkListsView.show(catalogue);
     this.addEventListener("catalogue-changed", () => {
       liquidsView.render();
       drinksView.render();
+      drinkListsView.render();
     });
   }
 }

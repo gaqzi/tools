@@ -25,3 +25,8 @@ export function gramsOfAlcohol(ml) {
 export function standardDrinks(grams, { gramsPerStandardDrink = GRAMS_PER_STANDARD_DRINK } = {}) {
   return grams / gramsPerStandardDrink;
 }
+
+// A rough estimate for an average person: one standard drink per hour.
+export function hoursToClear(standardDrinkCount) {
+  return standardDrinkCount;
+}

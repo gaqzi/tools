@@ -2,6 +2,7 @@
 // A drink is { name, parts: [{ liquid, amount }] } where `liquid` is a
 // liquid's stored name and `amount` is millilitres.
 
+import { InUseError } from "./references.js";
 import { alcoholMl, alcoholPercent, totalAmount } from "./alcohol.js";
 
 export class UnknownDrinkError extends Error {
@@ -52,11 +53,18 @@ export class Drinks {
   #store;
   #liquids;
   #changed;
+  #referrers = [];
 
   constructor(store, { liquids, changed }) {
     this.#store = store;
     this.#liquids = liquids;
     this.#changed = changed;
+  }
+
+  // A referrer uses drinks by name: `usesOf(name)` lists who uses one and
+  // `relabel(oldName, newName)` follows a rename.
+  referredToBy(referrer) {
+    this.#referrers.push(referrer);
   }
 
   all() {
@@ -81,6 +89,7 @@ export class Drinks {
     const drink = this.#find(name);
     const trimmed = validName(newName);
     this.#refuseTaken(trimmed, drink);
+    for (const referrer of this.#referrers) referrer.relabel(drink.name, trimmed);
     drink.name = trimmed;
     this.#changed();
     return copy(drink);
@@ -88,6 +97,8 @@ export class Drinks {
 
   remove(name) {
     const drink = this.#find(name);
+    const users = this.#referrers.flatMap((referrer) => referrer.usesOf(drink.name));
+    if (users.length > 0) throw new InUseError(drink.name, users);
     this.#store.splice(this.#store.indexOf(drink), 1);
     this.#changed();
   }

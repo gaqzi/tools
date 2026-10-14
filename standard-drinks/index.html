@@ -31,7 +31,7 @@
 
   .container { width: 100%; max-width: 440px; }
 
-  standard-drinks, liquids-view, drinks-view { display: block; }
+  standard-drinks, liquids-view, drinks-view, drink-lists-view { display: block; }
 
   h1 {
     font-family: 'DM Serif Display', serif;
@@ -43,7 +43,7 @@
 
   h2 { font-family: 'DM Serif Display', serif; font-size: 1.25rem; font-weight: 400; margin: 1.5rem 0 0.75rem; }
 
-  liquids-view, drinks-view {
+  liquids-view, drinks-view, drink-lists-view {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -56,7 +56,7 @@
   td.alcohol-percent { text-align: right; color: var(--muted); }
   td.actions { text-align: right; width: 1%; padding-left: 0.5rem; }
   button.remove { font-size: 0.75rem; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.15rem 0.4rem; cursor: pointer; }
-  form.add-liquid, form.add-drink, form.add-part { display: flex; gap: 0.5rem; }
+  form.add-liquid, form.add-drink, form.add-part, form.add-drink-list, form.add-entry { display: flex; gap: 0.5rem; }
   form input, form select { min-width: 0; flex: 1; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; }
 
   /* A drink row is a card: name and figures on one line, parts and the add-part form below. */
@@ -66,6 +66,14 @@
   drinks-view td.parts { flex: 1 0 100%; color: var(--muted); font-size: 0.9rem; }
   drinks-view td.standard-drinks::after { content: " std"; color: var(--muted); }
   drinks-view td.add-part-cell { flex: 1 0 100%; margin-top: 0.25rem; }
+  /* A drink list row is a card like a drink row. */
+  drink-lists-view tr { display: flex; flex-wrap: wrap; column-gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  drink-lists-view td { border: 0; padding: 0.1rem 0; }
+  drink-lists-view td.name { flex: 1 0 100%; font-weight: 600; }
+  drink-lists-view td.entries { flex: 1 0 100%; color: var(--muted); font-size: 0.9rem; }
+  drink-lists-view td.standard-drinks::after { content: " std"; color: var(--muted); }
+  drink-lists-view td.add-entry-cell { flex: 1 0 100%; margin-top: 0.25rem; }
+  drink-lists-view p.note { color: var(--muted); font-size: 0.8rem; }
   .error { color: var(--hot); font-size: 0.85rem; min-height: 1.2em; margin-top: 0.5rem; }
 </style>
 </head>
@@ -77,6 +85,8 @@
     <liquids-view></liquids-view>
     <h2>Drinks</h2>
     <drinks-view></drinks-view>
+    <h2>Drink lists</h2>
+    <drink-lists-view></drink-lists-view>
   </standard-drinks>
 </div>
 <script type="module" src="standard-drinks.js"></script>
