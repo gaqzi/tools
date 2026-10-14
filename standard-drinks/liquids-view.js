@@ -1,4 +1,5 @@
-// Defines <liquids-view>: the liquids table and the add-liquid form.
+// Defines <liquids-view>: the liquids table, the add-liquid form and a remove button per liquid.
+// After any attempted change it dispatches a bubbling "catalogue-changed" event.
 
 class LiquidsView extends HTMLElement {
   #liquids = null;
@@ -6,7 +7,11 @@ class LiquidsView extends HTMLElement {
   set liquids(service) {
     this.#liquids = service;
     this.#build();
-    this.#render();
+    this.render();
+  }
+
+  render() {
+    this.rows.replaceChildren(...this.#liquids.all().map((liquid) => this.#row(liquid)));
   }
 
   #build() {
@@ -20,13 +25,14 @@ class LiquidsView extends HTMLElement {
     const name = input({ name: "name", type: "text", placeholder: "Liquid", required: true });
     const percent = input({ name: "alcoholPercent", type: "number", placeholder: "%", required: true });
     Object.assign(percent, { step: "any", min: "0", max: "100" });
-    const submit = document.createElement("button");
-    submit.type = "submit";
-    submit.textContent = "Add";
-    this.form.append(name, percent, submit);
+    this.form.append(name, percent, button({ type: "submit", textContent: "Add" }));
     this.form.addEventListener("submit", (event) => {
       event.preventDefault();
-      this.#add();
+      const { name, alcoholPercent } = this.form.elements;
+      this.#attempt(() => {
+        this.#liquids.add({ name: name.value, alcoholPercent: alcoholPercent.valueAsNumber });
+        this.form.reset();
+      });
     });
 
     this.error = document.createElement("p");
@@ -34,20 +40,28 @@ class LiquidsView extends HTMLElement {
     this.replaceChildren(table, this.form, this.error);
   }
 
-  #add() {
-    const { name, alcoholPercent } = this.form.elements;
+  #attempt(change) {
     try {
-      this.#liquids.add({ name: name.value, alcoholPercent: alcoholPercent.valueAsNumber });
-      this.form.reset();
+      change();
       this.error.textContent = "";
     } catch (error) {
       this.error.textContent = error.message;
     }
-    this.#render();
+    this.dispatchEvent(new CustomEvent("catalogue-changed", { bubbles: true }));
   }
 
-  #render() {
-    this.rows.replaceChildren(...this.#liquids.all().map(row));
+  #row({ name, alcoholPercent }) {
+    const tr = document.createElement("tr");
+    tr.dataset.liquid = name;
+    const remove = button({ type: "button", className: "remove", textContent: "Remove" });
+    remove.setAttribute("aria-label", `Remove ${name}`);
+    remove.addEventListener("click", () => this.#attempt(() => this.#liquids.remove(name)));
+    tr.append(
+      cell("name", name),
+      cell("alcohol-percent", `${alcoholPercent} %`),
+      cell("actions", remove),
+    );
+    return tr;
   }
 }
 
@@ -55,17 +69,15 @@ function input(properties) {
   return Object.assign(document.createElement("input"), properties);
 }
 
-function row({ name, alcoholPercent }) {
-  const tr = document.createElement("tr");
-  tr.dataset.liquid = name;
-  const nameCell = document.createElement("td");
-  nameCell.className = "name";
-  nameCell.textContent = name;
-  const percentCell = document.createElement("td");
-  percentCell.className = "alcohol-percent";
-  percentCell.textContent = `${alcoholPercent} %`;
-  tr.append(nameCell, percentCell);
-  return tr;
+function button(properties) {
+  return Object.assign(document.createElement("button"), properties);
+}
+
+function cell(className, content) {
+  const td = document.createElement("td");
+  td.className = className;
+  td.append(content);
+  return td;
 }
 
 customElements.define("liquids-view", LiquidsView);

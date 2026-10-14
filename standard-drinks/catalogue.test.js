@@ -35,3 +35,33 @@ describe("a catalogue over the stores", () => {
     );
   });
 });
+
+describe("a catalogue whose drinks refer to its liquids", () => {
+  it("shows a renamed liquid in the drink that uses it, remembering the stores once per change", () => {
+    const { catalogue, remembered } = open();
+    catalogue.drinks.add({ name: "Gimlet", parts: [{ liquid: "gin", amount: 60 }] });
+    catalogue.liquids.rename("Gin", "London dry");
+
+    // `remember` is read for its call count: persisting once per change (the
+    // drink added, the liquid renamed, and not again for the relabelled drink)
+    // has no output of its own to compare.
+    assert.deepEqual(
+      { gimlet: catalogue.drinks.get("Gimlet"), remembered: remembered.length },
+      { gimlet: { name: "Gimlet", parts: [{ liquid: "London dry", amount: 60 }] }, remembered: 2 },
+    );
+  });
+
+  it("refuses to remove a liquid a drink uses", () => {
+    const { catalogue } = open();
+    catalogue.drinks.add({ name: "Gimlet", parts: [{ liquid: "Gin", amount: 60 }] });
+    const error = (() => {
+      try {
+        catalogue.liquids.remove("Gin");
+      } catch (caught) {
+        return caught;
+      }
+    })();
+
+    assert.equal(error?.message, '"Gin" is used by Gimlet.');
+  });
+});

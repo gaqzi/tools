@@ -1,5 +1,7 @@
 // The liquids a user can mix drinks from: unique names, alcohol percentages.
 
+import { InUseError } from "./references.js";
+
 export class DuplicateLiquidError extends Error {
   constructor(liquid) {
     super(`A liquid named "${liquid}" already exists.`);
@@ -43,10 +45,17 @@ function validPercent(name, alcoholPercent) {
 export class Liquids {
   #store;
   #changed;
+  #referrers = [];
 
   constructor(store, { changed }) {
     this.#store = store;
     this.#changed = changed;
+  }
+
+  // A referrer uses liquids by name: `usesOf(name)` lists who uses one and
+  // `relabel(oldName, newName)` follows a rename.
+  referredToBy(referrer) {
+    this.#referrers.push(referrer);
   }
 
   all() {
@@ -78,6 +87,7 @@ export class Liquids {
     const liquid = this.#find(name);
     const trimmed = validName(newName);
     this.#refuseTaken(trimmed, liquid);
+    for (const referrer of this.#referrers) referrer.relabel(liquid.name, trimmed);
     liquid.name = trimmed;
     this.#changed();
     return { ...liquid };
@@ -85,6 +95,8 @@ export class Liquids {
 
   remove(name) {
     const liquid = this.#find(name);
+    const users = this.#referrers.flatMap((referrer) => referrer.usesOf(liquid.name));
+    if (users.length > 0) throw new InUseError(liquid.name, users);
     this.#store.splice(this.#store.indexOf(liquid), 1);
     this.#changed();
   }

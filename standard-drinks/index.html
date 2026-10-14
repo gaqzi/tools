@@ -31,7 +31,7 @@
 
   .container { width: 100%; max-width: 440px; }
 
-  standard-drinks, liquids-view { display: block; }
+  standard-drinks, liquids-view, drinks-view { display: block; }
 
   h1 {
     font-family: 'DM Serif Display', serif;
@@ -41,7 +41,9 @@
     margin-bottom: 1.5rem;
   }
 
-  liquids-view {
+  h2 { font-family: 'DM Serif Display', serif; font-size: 1.25rem; font-weight: 400; margin: 1.5rem 0 0.75rem; }
+
+  liquids-view, drinks-view {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 16px;
@@ -52,8 +54,18 @@
   table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
   td { padding: 0.35rem 0; border-bottom: 1px solid var(--border); }
   td.alcohol-percent { text-align: right; color: var(--muted); }
-  form.add-liquid { display: flex; gap: 0.5rem; }
-  form.add-liquid input { min-width: 0; flex: 1; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; }
+  td.actions { text-align: right; width: 1%; padding-left: 0.5rem; }
+  button.remove { font-size: 0.75rem; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 6px; padding: 0.15rem 0.4rem; cursor: pointer; }
+  form.add-liquid, form.add-drink, form.add-part { display: flex; gap: 0.5rem; }
+  form input, form select { min-width: 0; flex: 1; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; }
+
+  /* A drink row is a card: name and figures on one line, parts and the add-part form below. */
+  drinks-view tr { display: flex; flex-wrap: wrap; column-gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  drinks-view td { border: 0; padding: 0.1rem 0; }
+  drinks-view td.name { flex: 1 0 100%; font-weight: 600; }
+  drinks-view td.parts { flex: 1 0 100%; color: var(--muted); font-size: 0.9rem; }
+  drinks-view td.standard-drinks::after { content: " std"; color: var(--muted); }
+  drinks-view td.add-part-cell { flex: 1 0 100%; margin-top: 0.25rem; }
   .error { color: var(--hot); font-size: 0.85rem; min-height: 1.2em; margin-top: 0.5rem; }
 </style>
 </head>
@@ -61,10 +73,14 @@
 <div class="container">
   <h1>Standard Drinks</h1>
   <standard-drinks>
+    <h2>Liquids</h2>
     <liquids-view></liquids-view>
+    <h2>Drinks</h2>
+    <drinks-view></drinks-view>
   </standard-drinks>
 </div>
 <script type="module" src="standard-drinks.js"></script>
 <script type="module" src="liquids-view.js"></script>
+<script type="module" src="drinks-view.js"></script>
 </body>
 </html>
