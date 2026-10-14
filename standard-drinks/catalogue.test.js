@@ -6,6 +6,20 @@ function stores(overrides = {}) {
   return { liquids: [{ name: "Gin", alcoholPercent: 40 }], drinks: [], drinkLists: [], ...overrides };
 }
 
+// A refusal is one state: the error's name and the data it carries. The
+// message is left out because references.test.js pins it.
+function refusal(fn) {
+  try {
+    fn();
+  } catch (error) {
+    return { error: error.constructor.name, item: error.item, users: error.users };
+  }
+  return "none";
+}
+function inUse({ item, users }) {
+  return { error: "InUseError", item, users };
+}
+
 // `remember` is a mock that records what it was handed. Persisting on every
 // change is an effect with no return value to compare, so the recorded
 // arguments are the only way to observe the wiring.
@@ -54,15 +68,8 @@ describe("a catalogue whose drinks refer to its liquids", () => {
   it("refuses to remove a liquid a drink uses", () => {
     const { catalogue } = open();
     catalogue.drinks.add({ name: "Gimlet", parts: [{ liquid: "Gin", amount: 60 }] });
-    const error = (() => {
-      try {
-        catalogue.liquids.remove("Gin");
-      } catch (caught) {
-        return caught;
-      }
-    })();
 
-    assert.equal(error?.message, '"Gin" is used by Gimlet.');
+    assert.deepEqual(refusal(() => catalogue.liquids.remove("Gin")), inUse({ item: "Gin", users: ["Gimlet"] }));
   });
 });
 
@@ -86,15 +93,8 @@ describe("a catalogue whose drink lists refer to its drinks", () => {
 
   it("refuses to remove a drink a list uses", () => {
     const { catalogue } = withNegroniOnFriday();
-    const error = (() => {
-      try {
-        catalogue.drinks.remove("Negroni");
-      } catch (caught) {
-        return caught;
-      }
-    })();
 
-    assert.equal(error?.message, '"Negroni" is used by Friday.');
+    assert.deepEqual(refusal(() => catalogue.drinks.remove("Negroni")), inUse({ item: "Negroni", users: ["Friday"] }));
   });
 
   it("remembers the stores, now holding the list, when one is added", () => {

@@ -1,11 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import {
-  DrinkLists,
-  DuplicateDrinkListError,
-  InvalidDrinkListError,
-  UnknownDrinkListError,
-} from "./drink-lists.js";
+import { DrinkLists } from "./drink-lists.js";
 import { UnknownDrinkError } from "./drinks.js";
 
 // --- The state: the store's drink lists and how many times the service said it changed ---
@@ -89,8 +84,38 @@ function measured(service, name) {
   return { amount: round(service.amountOf(name)), alcohol: round(service.alcoholOf(name)) };
 }
 
+// A refusal is one state: the error's name and the data it carries.
 function refusal(fn) {
-  return caught(fn)?.constructor.name ?? "none";
+  const error = caught(fn);
+  if (error === null) return "none";
+  const fields = {
+    error: error.constructor.name,
+    drinkList: error.drinkList,
+    drink: error.drink,
+    message: error.message,
+  };
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
+}
+function unknownDrinkList(drinkList) {
+  return { error: "UnknownDrinkListError", drinkList, message: `There is no drink list named "${drinkList}".` };
+}
+function duplicateDrinkList(drinkList) {
+  return { error: "DuplicateDrinkListError", drinkList, message: `A drink list named "${drinkList}" already exists.` };
+}
+function unknownDrink(drink) {
+  return { error: "UnknownDrinkError", drink, message: `There is no drink named "${drink}".` };
+}
+function nameless(drinkList) {
+  return { error: "InvalidDrinkListError", drinkList, message: "A drink list needs a name." };
+}
+function badQuantity(drinkList) {
+  return { error: "InvalidDrinkListError", drinkList, message: "The quantity must be a whole number, 1 or more." };
+}
+function alreadyHas(drinkList, drink) {
+  return { error: "InvalidDrinkListError", drinkList, message: `${drinkList} already has ${drink}.` };
+}
+function hasNo(drinkList, drink) {
+  return { error: "InvalidDrinkListError", drinkList, message: `${drinkList} has no ${drink}.` };
 }
 
 function caught(fn) {
@@ -134,20 +159,10 @@ describe("reading drink lists", () => {
     assert.equal(read().saves, 0);
   });
 
-  it("refuses an unknown name", () => {
+  it("refuses an unknown name, naming the trimmed drink list", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.get("Sunday")) instanceof UnknownDrinkListError);
-  });
-
-  it("names the unknown drink list on the error and in its message", () => {
-    const { service } = open();
-    const error = caught(() => service.get(" Sunday "));
-
-    assert.deepEqual(
-      { drinkList: error.drinkList, message: error.message },
-      { drinkList: "Sunday", message: 'There is no drink list named "Sunday".' },
-    );
+    assert.deepEqual(refusal(() => service.get(" Sunday ")), unknownDrinkList("Sunday"));
   });
 });
 
@@ -182,53 +197,47 @@ describe("adding a drink list", () => {
     assert.deepEqual(read().drinkLists[2], { name: "Sunday", entries: [martiniEntry()] });
   });
 
-  it("refuses a name that exists, ignoring case and surrounding space", () => {
+  it("refuses a name that exists, ignoring case and surrounding space, naming the existing drink list", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.add({ name: " friday ", entries: [] })) instanceof DuplicateDrinkListError);
-  });
-
-  it("names the existing drink list on the duplicate error and in its message", () => {
-    const { service } = open();
-    const error = caught(() => service.add({ name: " friday ", entries: [] }));
-
-    assert.deepEqual(
-      { drinkList: error.drinkList, message: error.message },
-      { drinkList: "Friday", message: 'A drink list named "Friday" already exists.' },
-    );
+    assert.deepEqual(refusal(() => service.add({ name: " friday ", entries: [] })), duplicateDrinkList("Friday"));
   });
 
   it("leaves the store alone and does not save when it refuses a duplicate", () => {
     const { service, read } = open();
     const refused = refusal(() => service.add({ name: "friday", entries: [] }));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "DuplicateDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: duplicateDrinkList("Friday") });
   });
 
   const invalid = [
-    { why: "an empty name", list: { name: "", entries: [] } },
-    { why: "a blank name", list: { name: "   ", entries: [] } },
-    { why: "a quantity of zero", list: { name: "Sunday", entries: [martiniEntry({ quantity: 0 })] } },
-    { why: "a negative quantity", list: { name: "Sunday", entries: [martiniEntry({ quantity: -1 })] } },
-    { why: "a quantity with a fraction", list: { name: "Sunday", entries: [martiniEntry({ quantity: 1.5 })] } },
-    { why: "a quantity that is not a number", list: { name: "Sunday", entries: [martiniEntry({ quantity: "2" })] } },
-    { why: "a quantity of NaN", list: { name: "Sunday", entries: [martiniEntry({ quantity: NaN })] } },
-    { why: "the same drink twice", list: { name: "Sunday", entries: [martiniEntry(), martiniEntry({ quantity: 2 })] } },
+    { why: "an empty name", list: { name: "", entries: [] }, refused: nameless("") },
+    { why: "a blank name", list: { name: "   ", entries: [] }, refused: nameless("   ") },
+    { why: "a quantity of zero", list: { name: "Sunday", entries: [martiniEntry({ quantity: 0 })] }, refused: badQuantity("Sunday") },
+    { why: "a negative quantity", list: { name: "Sunday", entries: [martiniEntry({ quantity: -1 })] }, refused: badQuantity("Sunday") },
+    { why: "a quantity with a fraction", list: { name: "Sunday", entries: [martiniEntry({ quantity: 1.5 })] }, refused: badQuantity("Sunday") },
+    { why: "a quantity that is not a number", list: { name: "Sunday", entries: [martiniEntry({ quantity: "2" })] }, refused: badQuantity("Sunday") },
+    { why: "a quantity of NaN", list: { name: "Sunday", entries: [martiniEntry({ quantity: NaN })] }, refused: badQuantity("Sunday") },
+    {
+      why: "the same drink twice",
+      list: { name: "Sunday", entries: [martiniEntry(), martiniEntry({ quantity: 2 })] },
+      refused: alreadyHas("Sunday", "Martini"),
+    },
   ];
-  for (const { why, list } of invalid) {
+  for (const { why, list, refused } of invalid) {
     it(`refuses ${why}`, () => {
       const { service } = open();
 
-      assert.ok(caught(() => service.add(list)) instanceof InvalidDrinkListError);
+      assert.deepEqual(refusal(() => service.add(list)), refused);
     });
   }
 
   it("refuses the same drink twice when it is spelled differently", () => {
     const { service } = open(night(), answers({ get: { Martini: martiniDrink(), " martini": martiniDrink() } }));
 
-    assert.ok(
-      caught(() => service.add({ name: "Sunday", entries: [martiniEntry(), martiniEntry({ drink: " martini" })] })) instanceof
-        InvalidDrinkListError,
+    assert.deepEqual(
+      refusal(() => service.add({ name: "Sunday", entries: [martiniEntry(), martiniEntry({ drink: " martini" })] })),
+      alreadyHas("Sunday", "Martini"),
     );
   });
 
@@ -236,7 +245,7 @@ describe("adding a drink list", () => {
     const { service, read } = open();
     const refused = refusal(() => service.add({ name: "Sunday", entries: [martiniEntry({ quantity: 0 })] }));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "InvalidDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: badQuantity("Sunday") });
   });
 
   it("lets the drinks service's unknown drink error through unchanged", () => {
@@ -250,7 +259,7 @@ describe("adding a drink list", () => {
     const { service, read } = open(night(), answers({ get: { Martini: martiniDrink(), Mojito: new UnknownDrinkError("Mojito") } }));
     const refused = refusal(() => service.add({ name: "Sunday", entries: [martiniEntry(), { drink: "Mojito", quantity: 1 }] }));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "UnknownDrinkError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: unknownDrink("Mojito") });
   });
 });
 
@@ -275,29 +284,29 @@ describe("renaming a drink list", () => {
     assert.deepEqual(read(), night({ drinkLists: [friday({ name: "FRIDAY" }), saturday()], saves: 1 }));
   });
 
-  it("refuses an unknown name", () => {
+  it("refuses an unknown name, naming it", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.rename("Sunday", "Party")) instanceof UnknownDrinkListError);
+    assert.deepEqual(refusal(() => service.rename("Sunday", "Party")), unknownDrinkList("Sunday"));
   });
 
-  it("refuses a name another drink list has", () => {
+  it("refuses a name another drink list has, naming the existing one", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.rename("Friday", " SATURDAY")) instanceof DuplicateDrinkListError);
+    assert.deepEqual(refusal(() => service.rename("Friday", " SATURDAY")), duplicateDrinkList("Saturday"));
   });
 
   it("refuses a blank new name", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.rename("Friday", "  ")) instanceof InvalidDrinkListError);
+    assert.deepEqual(refusal(() => service.rename("Friday", "  ")), nameless("  "));
   });
 
   it("does not save when it refuses", () => {
     const { service, read } = open();
     const refused = refusal(() => service.rename("Friday", "saturday"));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "DuplicateDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: duplicateDrinkList("Saturday") });
   });
 });
 
@@ -309,17 +318,17 @@ describe("removing a drink list", () => {
     assert.deepEqual(read(), night({ drinkLists: [saturday()], saves: 1 }));
   });
 
-  it("refuses an unknown name", () => {
+  it("refuses an unknown name, naming it", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.remove("Sunday")) instanceof UnknownDrinkListError);
+    assert.deepEqual(refusal(() => service.remove("Sunday")), unknownDrinkList("Sunday"));
   });
 
   it("does not save when it refuses", () => {
     const { service, read } = open();
     const refused = refusal(() => service.remove("Sunday"));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "UnknownDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: unknownDrinkList("Sunday") });
   });
 });
 
@@ -343,31 +352,34 @@ describe("adding an entry to a drink list", () => {
     );
   });
 
-  it("refuses an unknown drink list", () => {
+  it("refuses an unknown drink list, naming it", () => {
     const { service } = open();
 
-    assert.ok(caught(() => service.addEntry("Sunday", martiniEntry())) instanceof UnknownDrinkListError);
+    assert.deepEqual(refusal(() => service.addEntry("Sunday", martiniEntry())), unknownDrinkList("Sunday"));
   });
 
   const invalid = [
-    { why: "a quantity of zero", added: martiniEntry({ quantity: 0 }) },
-    { why: "a negative quantity", added: martiniEntry({ quantity: -2 }) },
-    { why: "a quantity with a fraction", added: martiniEntry({ quantity: 2.5 }) },
-    { why: "a quantity that is not a number", added: martiniEntry({ quantity: "2" }) },
-    { why: "a drink the list already has", added: negroniEntry({ quantity: 5 }) },
+    { why: "a quantity of zero", added: martiniEntry({ quantity: 0 }), refused: badQuantity("Saturday") },
+    { why: "a negative quantity", added: martiniEntry({ quantity: -2 }), refused: badQuantity("Saturday") },
+    { why: "a quantity with a fraction", added: martiniEntry({ quantity: 2.5 }), refused: badQuantity("Saturday") },
+    { why: "a quantity that is not a number", added: martiniEntry({ quantity: "2" }), refused: badQuantity("Saturday") },
+    { why: "a drink the list already has", added: negroniEntry({ quantity: 5 }), refused: alreadyHas("Saturday", "Negroni") },
   ];
-  for (const { why, added } of invalid) {
+  for (const { why, added, refused } of invalid) {
     it(`refuses ${why}`, () => {
       const { service } = open();
 
-      assert.ok(caught(() => service.addEntry("Saturday", added)) instanceof InvalidDrinkListError);
+      assert.deepEqual(refusal(() => service.addEntry("Saturday", added)), refused);
     });
   }
 
   it("refuses a drink the list already has when it is spelled differently", () => {
     const { service } = open(night(), answers({ get: { " negroni": negroniDrink() } }));
 
-    assert.ok(caught(() => service.addEntry("Saturday", { drink: " negroni", quantity: 1 })) instanceof InvalidDrinkListError);
+    assert.deepEqual(
+      refusal(() => service.addEntry("Saturday", { drink: " negroni", quantity: 1 })),
+      alreadyHas("Saturday", "Negroni"),
+    );
   });
 
   it("lets the drinks service's unknown drink error through unchanged", () => {
@@ -381,7 +393,7 @@ describe("adding an entry to a drink list", () => {
     const { service, read } = open();
     const refused = refusal(() => service.addEntry("Saturday", negroniEntry()));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "InvalidDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: alreadyHas("Saturday", "Negroni") });
   });
 });
 
@@ -402,20 +414,20 @@ describe("removing an entry from a drink list", () => {
   it("refuses a drink that is not in the list", () => {
     const { service } = open(night(), {});
 
-    assert.ok(caught(() => service.removeEntry("Saturday", "Martini")) instanceof InvalidDrinkListError);
+    assert.deepEqual(refusal(() => service.removeEntry("Saturday", "Martini")), hasNo("Saturday", "Martini"));
   });
 
-  it("refuses an unknown drink list", () => {
+  it("refuses an unknown drink list, naming it", () => {
     const { service } = open(night(), {});
 
-    assert.ok(caught(() => service.removeEntry("Sunday", "Negroni")) instanceof UnknownDrinkListError);
+    assert.deepEqual(refusal(() => service.removeEntry("Sunday", "Negroni")), unknownDrinkList("Sunday"));
   });
 
   it("changes nothing and does not save when it refuses", () => {
     const { service, read } = open(night(), {});
     const refused = refusal(() => service.removeEntry("Saturday", "Martini"));
 
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: "InvalidDrinkListError" });
+    assert.deepEqual({ ...read(), refused }, { ...night(), refused: hasNo("Saturday", "Martini") });
   });
 });
 
@@ -456,7 +468,7 @@ describe("computing the totals of a drink list from its drinks", () => {
     it(`${method} refuses an unknown drink list`, () => {
       const { service } = open();
 
-      assert.ok(caught(() => service[method]("Sunday")) instanceof UnknownDrinkListError);
+      assert.deepEqual(refusal(() => service[method]("Sunday")), unknownDrinkList("Sunday"));
     });
   }
 });
