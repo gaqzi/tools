@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Standard Drinks</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f0eb;
+    --card: #fffdf9;
+    --text: #2c2418;
+    --muted: #8a7e6b;
+    --accent: #5a7247;
+    --hot: #c4522a;
+    --border: #e2ddd5;
+    --shadow: 0 2px 20px rgba(44, 36, 24, 0.06);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+  }
+
+  .container { width: 100%; max-width: 440px; }
+
+  standard-drinks, liquids-view { display: block; }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.75rem;
+    font-weight: 400;
+    text-align: center;
+    margin-bottom: 1.5rem;
+  }
+
+  liquids-view {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+  td { padding: 0.35rem 0; border-bottom: 1px solid var(--border); }
+  td.alcohol-percent { text-align: right; color: var(--muted); }
+  form.add-liquid { display: flex; gap: 0.5rem; }
+  form.add-liquid input { min-width: 0; flex: 1; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px; }
+  .error { color: var(--hot); font-size: 0.85rem; min-height: 1.2em; margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Standard Drinks</h1>
+  <standard-drinks>
+    <liquids-view></liquids-view>
+  </standard-drinks>
+</div>
+<script type="module" src="standard-drinks.js"></script>
+<script type="module" src="liquids-view.js"></script>
+</body>
+</html>
