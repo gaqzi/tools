@@ -4,6 +4,7 @@ const port = 8010;
 
 export default defineConfig({
   testMatch: "**/*.browser.spec.js",
+  fullyParallel: true,
   use: { baseURL: `http://localhost:${port}/` },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
