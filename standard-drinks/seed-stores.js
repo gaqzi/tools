@@ -6,7 +6,7 @@ const SEED_LIQUIDS = [
   ["Gin", 40],
   ["Vodka", 40],
   ["Whisky", 40],
-  ["Campari", 23],
+  ["Campari", 25],
   ["Sweet vermouth", 15],
   ["Dry vermouth", 18],
   ["Lager", 5],

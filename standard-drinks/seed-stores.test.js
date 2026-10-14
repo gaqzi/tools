@@ -11,7 +11,7 @@ function seedLiquids() {
     { name: "Gin", alcoholPercent: 40 },
     { name: "Vodka", alcoholPercent: 40 },
     { name: "Whisky", alcoholPercent: 40 },
-    { name: "Campari", alcoholPercent: 23 },
+    { name: "Campari", alcoholPercent: 25 },
     { name: "Sweet vermouth", alcoholPercent: 15 },
     { name: "Dry vermouth", alcoholPercent: 18 },
     { name: "Lager", alcoholPercent: 5 },

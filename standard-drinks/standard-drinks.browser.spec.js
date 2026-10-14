@@ -38,9 +38,9 @@ function drink(overrides = {}) {
     name: "Negroni",
     parts: "Campari 45 ml, Gin 45 ml, Sweet vermouth 45 ml",
     amount: 135,
-    alcoholPercent: 26,
-    alcohol: 35.1,
-    standardDrinks: 2.3,
+    alcoholPercent: 26.7,
+    alcohol: 36,
+    standardDrinks: 2.4,
     ...overrides,
   };
 }
@@ -64,10 +64,10 @@ function drinkList(overrides = {}) {
     name: "Friday",
     entries: "2 × Negroni, 1 × Lager large",
     amount: 770,
-    alcoholPercent: 12.4,
-    alcohol: 95.2,
-    standardDrinks: 6.3,
-    hoursToClear: 6.3,
+    alcoholPercent: 12.6,
+    alcohol: 97,
+    standardDrinks: 6.4,
+    hoursToClear: 6.4,
     ...overrides,
   };
 }
@@ -82,7 +82,7 @@ function seedLiquids() {
     liquid({ name: "Gin", alcoholPercent: 40 }),
     liquid({ name: "Vodka", alcoholPercent: 40 }),
     liquid({ name: "Whisky", alcoholPercent: 40 }),
-    liquid({ name: "Campari", alcoholPercent: 23 }),
+    liquid({ name: "Campari", alcoholPercent: 25 }),
     liquid({ name: "Sweet vermouth", alcoholPercent: 15 }),
     liquid({ name: "Dry vermouth", alcoholPercent: 18 }),
     liquid({ name: "Lager", alcoholPercent: 5 }),
@@ -413,14 +413,14 @@ test.describe("importing a catalogue", () => {
   test("replaces the liquids, drinks and drink lists", async ({ page }) => {
     await openCatalogue(page);
     const imported = storedStores(
-      [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 23 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
+      [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 25 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
       [storedNegroni(), storedLagerLarge()],
       [storedFriday()],
     );
     await importCatalogue(page, JSON.stringify(imported));
     await expect.poll(() => readCatalogue(page)).toEqual(
       catalogue({
-        liquids: [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 23 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
+        liquids: [liquid({ name: "Gin", alcoholPercent: 40 }), liquid({ name: "Campari", alcoholPercent: 25 }), liquid({ name: "Sweet vermouth", alcoholPercent: 15 }), liquid({ name: "Lager", alcoholPercent: 5 })],
         drinks: [drink(), lagerLarge()],
         drinkLists: [drinkList()],
       }),
