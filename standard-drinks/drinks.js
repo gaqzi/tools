@@ -83,9 +83,10 @@ export class Drinks {
 
   // The one change operation: every rule is checked before anything is
   // written, and one call is one save. A new name is relabelled in referrers.
-  update(name, { name: newName }) {
+  update(name, { name: newName } = {}) {
     const drink = this.#find(name);
-    const trimmed = newName === undefined ? drink.name : validName(newName);
+    if (newName === undefined) throw new InvalidDrinkError(drink.name, "Nothing to update: no fields were given.");
+    const trimmed = validName(newName);
     this.#refuseTaken(trimmed, drink);
     if (trimmed !== drink.name) this.#rename(drink, trimmed);
     this.#changed();

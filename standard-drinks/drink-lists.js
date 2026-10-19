@@ -76,9 +76,10 @@ export class DrinkLists {
 
   // The one change operation: every rule is checked before anything is
   // written, and one call is one save.
-  update(name, { name: newName }) {
+  update(name, { name: newName } = {}) {
     const drinkList = this.#find(name);
-    const trimmed = newName === undefined ? drinkList.name : validName(newName);
+    if (newName === undefined) throw new InvalidDrinkListError(drinkList.name, "Nothing to update: no fields were given.");
+    const trimmed = validName(newName);
     this.#refuseTaken(trimmed, drinkList);
     if (trimmed !== drinkList.name) this.#rename(drinkList, trimmed);
     this.#changed();

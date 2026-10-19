@@ -142,6 +142,9 @@ function alreadyHas(drink, liquid) {
 function hasNo(drink, liquid) {
   return { error: "InvalidDrinkError", drink, message: `${drink} has no ${liquid}.` };
 }
+function nothingToUpdate(drink) {
+  return { error: "InvalidDrinkError", drink, message: "Nothing to update: no fields were given." };
+}
 function inUse({ item, users }) {
   return { error: "InUseError", item, users };
 }
@@ -561,6 +564,7 @@ describe("updating a drink applies every given field as one change", () => {
   const changes = [
     { fields: "the name", change: { name: "  Boulevardier " }, drink: negroni({ name: "Boulevardier" }), told: [relabelling()] },
     { fields: "the name in another casing", change: { name: "NEGRONI" }, drink: negroni({ name: "NEGRONI" }), told: [relabelling({ to: "NEGRONI" })] },
+    { fields: "the name it already has", change: { name: "Negroni" }, drink: negroni(), told: [] },
   ];
   for (const { fields, change, drink, told } of changes) {
     it(`stores ${fields}, tells referrers only about a changed name, and saves once`, () => {
@@ -581,16 +585,25 @@ describe("updating a drink applies every given field as one change", () => {
   const refused = [
     { why: "the name is taken", change: { name: "martini" }, refusal: duplicateDrink("Martini") },
     { why: "the name is blank", change: { name: "  " }, refusal: nameless("  ") },
+    { why: "no change object", change: undefined, refusal: nothingToUpdate("Negroni") },
+    { why: "an empty change", change: {}, refusal: nothingToUpdate("Negroni") },
   ];
   for (const { why, change, refusal: expected } of refused) {
     it(`writes nothing, tells no referrer and does not save when ${why}`, () => {
       const relabelled = [];
       const { service, read } = open(bar(), answers(), { referrers: [relabellingReferrer(relabelled)] });
-      const result = refusal(() => service.update("Negroni", change));
+      const result = refusal(() => service.update(" nEGRONI", change));
 
       assert.deepEqual({ ...read(), relabelled, result }, { ...bar(), relabelled: [], result: expected });
     });
   }
+
+  it("refuses an unknown name, naming it, when given nothing", () => {
+    const { service, read } = open();
+    const result = refusal(() => service.update("Mojito"));
+
+    assert.deepEqual({ ...read(), result }, { ...bar(), result: unknownDrink("Mojito") });
+  });
 });
 
 describe("removing a drink that referrers use", () => {

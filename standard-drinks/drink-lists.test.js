@@ -111,6 +111,9 @@ function nameless(drinkList) {
 function badQuantity(drinkList) {
   return { error: "InvalidDrinkListError", drinkList, message: "The quantity must be a whole number, 1 or more." };
 }
+function nothingToUpdate(drinkList) {
+  return { error: "InvalidDrinkListError", drinkList, message: "Nothing to update: no fields were given." };
+}
 function alreadyHas(drinkList, drink) {
   return { error: "InvalidDrinkListError", drinkList, message: `${drinkList} already has ${drink}.` };
 }
@@ -296,6 +299,7 @@ describe("updating a drink list applies every given field as one change", () => 
   const changes = [
     { fields: "the name", change: { name: "  Party " }, drinkList: friday({ name: "Party" }) },
     { fields: "the name in another casing", change: { name: "FRIDAY" }, drinkList: friday({ name: "FRIDAY" }) },
+    { fields: "the name it already has", change: { name: "Friday" }, drinkList: friday() },
   ];
   for (const { fields, change, drinkList } of changes) {
     it(`stores ${fields} and saves once`, () => {
@@ -309,15 +313,24 @@ describe("updating a drink list applies every given field as one change", () => 
   const refused = [
     { why: "the name is taken", change: { name: "saturday" }, refusal: duplicateDrinkList("Saturday") },
     { why: "the name is blank", change: { name: "  " }, refusal: nameless("  ") },
+    { why: "no change object", change: undefined, refusal: nothingToUpdate("Friday") },
+    { why: "an empty change", change: {}, refusal: nothingToUpdate("Friday") },
   ];
   for (const { why, change, refusal: expected } of refused) {
     it(`writes nothing and does not save when ${why}`, () => {
       const { service, read } = open();
-      const result = refusal(() => service.update("Friday", change));
+      const result = refusal(() => service.update(" fRIDAY", change));
 
       assert.deepEqual({ ...read(), result }, { ...night(), result: expected });
     });
   }
+
+  it("refuses an unknown name, naming it, when given nothing", () => {
+    const { service, read } = open();
+    const result = refusal(() => service.update("Sunday"));
+
+    assert.deepEqual({ ...read(), result }, { ...night(), result: unknownDrinkList("Sunday") });
+  });
 });
 
 describe("the public surface of the drink lists service", () => {

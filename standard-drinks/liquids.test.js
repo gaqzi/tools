@@ -53,6 +53,9 @@ function nameless(liquid) {
 function outOfRange(liquid) {
   return { error: "InvalidLiquidError", liquid, message: "The alcohol percentage must be a number from 0 to 100." };
 }
+function nothingToUpdate(liquid) {
+  return { error: "InvalidLiquidError", liquid, message: "Nothing to update: no fields were given." };
+}
 function inUse({ item, users }) {
   return { error: "InUseError", item, users };
 }
@@ -269,6 +272,7 @@ describe("updating a liquid applies every given field as one change", () => {
     { fields: "the name", change: { name: "  London dry " }, liquid: gin({ name: "London dry" }), told: [relabelling()] },
     { fields: "the name in another casing", change: { name: "GIN" }, liquid: gin({ name: "GIN" }), told: [relabelling({ to: "GIN" })] },
     { fields: "the percentage", change: { alcoholPercent: 37.5 }, liquid: gin({ alcoholPercent: 37.5 }), told: [] },
+    { fields: "the percentage it already has", change: { alcoholPercent: 40 }, liquid: gin(), told: [] },
     {
       fields: "the name and the percentage",
       change: { name: "  London dry ", alcoholPercent: 37.5 },
@@ -303,16 +307,25 @@ describe("updating a liquid applies every given field as one change", () => {
     { why: "a percentage out of range alone", change: { alcoholPercent: 101 }, refusal: outOfRange("Gin") },
     { why: "a taken name and a valid percentage", change: { name: " lime JUICE", alcoholPercent: 37.5 }, refusal: duplicateLiquid("Lime juice") },
     { why: "a blank name and a valid percentage", change: { name: "  ", alcoholPercent: 37.5 }, refusal: nameless("  ") },
+    { why: "no change object", change: undefined, refusal: nothingToUpdate("Gin") },
+    { why: "an empty change", change: {}, refusal: nothingToUpdate("Gin") },
   ];
   for (const { why, change, refusal: expected } of refused) {
     it(`writes nothing, tells no referrer and does not save when ${why}`, () => {
       const relabelled = [];
       const { service, read } = open(shelf(), { referrers: [relabellingReferrer(relabelled)] });
-      const result = refusal(() => service.update("Gin", change));
+      const result = refusal(() => service.update(" gIN", change));
 
       assert.deepEqual({ ...read(), relabelled, result }, { ...shelf(), relabelled: [], result: expected });
     });
   }
+
+  it("refuses an unknown name, naming it, when given nothing", () => {
+    const { service, read } = open();
+    const result = refusal(() => service.update("Rum"));
+
+    assert.deepEqual({ ...read(), result }, { ...shelf(), result: unknownLiquid("Rum") });
+  });
 });
 
 describe("removing a liquid that referrers use", () => {
