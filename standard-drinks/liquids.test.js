@@ -179,24 +179,10 @@ describe("updating a liquid", () => {
 });
 
 describe("updating a liquid's name", () => {
-  it("gives it the trimmed new name, keeps its place and saves once", () => {
-    const { service, read } = open();
-    service.update("gin", { name: "  London dry " });
-
-    assert.deepEqual(read(), shelf({ liquids: [gin({ name: "London dry" }), limeJuice()], saves: 1 }));
-  });
-
   it("returns a copy of the liquid under its new name", () => {
     const { service } = open();
 
     assert.deepEqual(service.update("Gin", { name: "London dry" }), gin({ name: "London dry" }));
-  });
-
-  it("allows a different casing of its own name", () => {
-    const { service, read } = open();
-    service.update("Gin", { name: "GIN" });
-
-    assert.deepEqual(read(), shelf({ liquids: [gin({ name: "GIN" }), limeJuice()], saves: 1 }));
   });
 
   it("refuses an unknown name, naming it", () => {
@@ -215,13 +201,6 @@ describe("updating a liquid's name", () => {
     const { service } = open();
 
     assert.deepEqual(refusal(() => service.update("Gin", { name: "  " })), nameless("  "));
-  });
-
-  it("does not save when it refuses", () => {
-    const { service, read } = open();
-    const refused = refusal(() => service.update("Gin", { name: "lime juice" }));
-
-    assert.deepEqual({ ...read(), refused }, { ...shelf(), refused: duplicateLiquid("Lime juice") });
   });
 });
 

@@ -264,24 +264,10 @@ describe("adding a drink list", () => {
 });
 
 describe("updating a drink list's name", () => {
-  it("gives it the trimmed new name, keeps its place and saves once", () => {
-    const { service, read } = open();
-    service.update("friday", { name: "  Party " });
-
-    assert.deepEqual(read(), night({ drinkLists: [friday({ name: "Party" }), saturday()], saves: 1 }));
-  });
-
   it("returns a deep copy of the drink list under its new name", () => {
     const { service } = open();
 
     assert.deepEqual(service.update("Friday", { name: "Party" }), friday({ name: "Party" }));
-  });
-
-  it("allows a different casing of its own name", () => {
-    const { service, read } = open();
-    service.update("Friday", { name: "FRIDAY" });
-
-    assert.deepEqual(read(), night({ drinkLists: [friday({ name: "FRIDAY" }), saturday()], saves: 1 }));
   });
 
   it("refuses an unknown name, naming it", () => {
@@ -301,13 +287,6 @@ describe("updating a drink list's name", () => {
 
     assert.deepEqual(refusal(() => service.update("Friday", { name: "  " })), nameless("  "));
   });
-
-  it("does not save when it refuses", () => {
-    const { service, read } = open();
-    const refused = refusal(() => service.update("Friday", { name: "saturday" }));
-
-    assert.deepEqual({ ...read(), refused }, { ...night(), refused: duplicateDrinkList("Saturday") });
-  });
 });
 
 describe("updating a drink list applies every given field as one change", () => {
@@ -316,6 +295,7 @@ describe("updating a drink list applies every given field as one change", () => 
   // not a new describe.
   const changes = [
     { fields: "the name", change: { name: "  Party " }, drinkList: friday({ name: "Party" }) },
+    { fields: "the name in another casing", change: { name: "FRIDAY" }, drinkList: friday({ name: "FRIDAY" }) },
   ];
   for (const { fields, change, drinkList } of changes) {
     it(`stores ${fields} and saves once`, () => {

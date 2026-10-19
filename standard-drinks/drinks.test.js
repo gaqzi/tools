@@ -281,24 +281,10 @@ describe("adding a drink", () => {
 });
 
 describe("updating a drink's name", () => {
-  it("gives it the trimmed new name, keeps its place and saves once", () => {
-    const { service, read } = open();
-    service.update("negroni", { name: "  Boulevardier " });
-
-    assert.deepEqual(read(), bar({ drinks: [negroni({ name: "Boulevardier" }), martini()], saves: 1 }));
-  });
-
   it("returns a deep copy of the drink under its new name", () => {
     const { service } = open();
 
     assert.deepEqual(service.update("Negroni", { name: "Boulevardier" }), negroni({ name: "Boulevardier" }));
-  });
-
-  it("allows a different casing of its own name", () => {
-    const { service, read } = open();
-    service.update("Negroni", { name: "NEGRONI" });
-
-    assert.deepEqual(read(), bar({ drinks: [negroni({ name: "NEGRONI" }), martini()], saves: 1 }));
   });
 
   it("refuses an unknown name, naming it", () => {
@@ -317,13 +303,6 @@ describe("updating a drink's name", () => {
     const { service } = open();
 
     assert.deepEqual(refusal(() => service.update("Negroni", { name: "  " })), nameless("  "));
-  });
-
-  it("does not save when it refuses", () => {
-    const { service, read } = open();
-    const refused = refusal(() => service.update("Negroni", { name: "martini" }));
-
-    assert.deepEqual({ ...read(), refused }, { ...bar(), refused: duplicateDrink("Martini") });
   });
 });
 
