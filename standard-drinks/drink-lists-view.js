@@ -66,17 +66,50 @@ class DrinkListsView extends HTMLElement {
     const standard = standardDrinks(gramsOfAlcohol(alcohol), this.#settings);
     const tr = document.createElement("tr");
     tr.dataset.drinkList = name;
+    const remove = button({ type: "button", className: "remove", textContent: "Remove" });
+    remove.setAttribute("aria-label", `Remove ${name}`);
+    remove.addEventListener("click", () => this.#attempt(() => this.#drinkLists.remove(name)));
     tr.append(
       cell("name", name),
-      cell("entries", entries.map(({ drink, quantity }) => `${quantity} × ${drink}`).join(", ")),
+      cell("entries", this.#entryChips(name, entries)),
       cell("amount", `${oneDecimal(amount)} ml`),
       cell("alcohol-percent", `${oneDecimal(this.#drinkLists.alcoholPercentOf(name))} %`),
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
       cell("standard-drinks", oneDecimal(standard)),
       cell("hours-to-clear", `${oneDecimal(hoursToClear(standard))} h`),
       cell("add-entry-cell", this.#addEntryForm(name, drinkNames)),
+      cell("edit-cell", this.#editForm(name)),
+      cell("actions", remove),
     );
     return tr;
+  }
+
+  #entryChips(listName, entries) {
+    const fragment = document.createDocumentFragment();
+    for (const { drink, quantity } of entries) {
+      const chip = document.createElement("span");
+      chip.className = "entry";
+      chip.dataset.drink = drink;
+      const remove = button({ type: "button", className: "remove-entry", textContent: "×" });
+      remove.setAttribute("aria-label", `Remove ${drink} from ${listName}`);
+      remove.addEventListener("click", () => this.#attempt(() => this.#drinkLists.removeEntry(listName, drink)));
+      chip.append(`${quantity} × ${drink} `, remove);
+      fragment.append(chip);
+    }
+    return fragment;
+  }
+
+  #editForm(name) {
+    const form = document.createElement("form");
+    form.className = "edit-drink-list";
+    const nameInput = input({ name: "name", type: "text", value: name, required: true });
+    nameInput.setAttribute("aria-label", `Name of ${name}`);
+    form.append(nameInput, button({ type: "submit", textContent: "Save" }));
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.#attempt(() => this.#drinkLists.update(name, { name: nameInput.value }));
+    });
+    return form;
   }
 
   #addEntryForm(listName, drinkNames) {

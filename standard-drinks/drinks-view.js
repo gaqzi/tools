@@ -65,15 +65,44 @@ class DrinksView extends HTMLElement {
     remove.addEventListener("click", () => this.#attempt(() => this.#drinks.remove(name)));
     tr.append(
       cell("name", name),
-      cell("parts", parts.map(({ liquid, amount }) => `${liquid} ${amount} ml`).join(", ")),
+      cell("parts", this.#partChips(name, parts)),
       cell("amount", `${oneDecimal(this.#drinks.amountOf(name))} ml`),
       cell("alcohol-percent", `${oneDecimal(this.#drinks.alcoholPercentOf(name))} %`),
       cell("alcohol", `${oneDecimal(alcohol)} ml`),
       cell("standard-drinks", oneDecimal(standardDrinks(gramsOfAlcohol(alcohol), this.#settings))),
       cell("add-part-cell", this.#addPartForm(name, liquidNames)),
+      cell("edit-cell", this.#editForm(name)),
       cell("actions", remove),
     );
     return tr;
+  }
+
+  #partChips(drinkName, parts) {
+    const fragment = document.createDocumentFragment();
+    for (const { liquid, amount } of parts) {
+      const chip = document.createElement("span");
+      chip.className = "part";
+      chip.dataset.liquid = liquid;
+      const remove = button({ type: "button", className: "remove-part", textContent: "×" });
+      remove.setAttribute("aria-label", `Remove ${liquid} from ${drinkName}`);
+      remove.addEventListener("click", () => this.#attempt(() => this.#drinks.removePart(drinkName, liquid)));
+      chip.append(`${liquid} ${amount} ml `, remove);
+      fragment.append(chip);
+    }
+    return fragment;
+  }
+
+  #editForm(name) {
+    const form = document.createElement("form");
+    form.className = "edit-drink";
+    const nameInput = input({ name: "name", type: "text", value: name, required: true });
+    nameInput.setAttribute("aria-label", `Name of ${name}`);
+    form.append(nameInput, button({ type: "submit", textContent: "Save" }));
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.#attempt(() => this.#drinks.update(name, { name: nameInput.value }));
+    });
+    return form;
   }
 
   #addPartForm(drinkName, liquidNames) {

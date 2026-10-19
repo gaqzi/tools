@@ -140,10 +140,39 @@ function storedFriday() {
   };
 }
 
+// Scenario: Saturday as the page shows it, one large lager.
+function saturday(overrides = {}) {
+  return drinkList({
+    name: "Saturday",
+    entries: "1 × Lager large",
+    amount: 500,
+    alcoholPercent: 5,
+    alcohol: 25,
+    standardDrinks: 1.6,
+    hoursToClear: 1.6,
+    ...overrides,
+  });
+}
+
+// Scenario: Saturday in the exact shape localStorage holds.
+function storedSaturday() {
+  return { name: "Saturday", entries: [{ drink: "Lager large", quantity: 1 }] };
+}
+
 // --- Observer, driver, opener ---
 
 function readCatalogue(page) {
-  return page.evaluate(() => ({
+  return page.evaluate(() => {
+    // A chip's label is its text without the remove button; chips join with ", ".
+    const chips = (row, selector) =>
+      [...row.querySelectorAll(selector)]
+        .map((chip) => {
+          const label = chip.cloneNode(true);
+          label.querySelector("button")?.remove();
+          return label.textContent.replace(/\s+/g, " ").trim();
+        })
+        .join(", ");
+    return {
     liquids: [...document.querySelectorAll("liquids-view tr[data-liquid]")].map((row) => ({
       name: row.querySelector(".name").textContent.trim(),
       alcoholPercent: parseFloat(row.querySelector(".alcohol-percent").textContent),
@@ -152,7 +181,7 @@ function readCatalogue(page) {
       const text = (selector) => row.querySelector(selector).textContent.trim();
       return {
         name: text(".name"),
-        parts: text(".parts"),
+        parts: chips(row, ".parts .part"),
         amount: parseFloat(text(".amount")),
         alcoholPercent: parseFloat(text(".alcohol-percent")),
         alcohol: parseFloat(text(".alcohol")),
@@ -163,7 +192,7 @@ function readCatalogue(page) {
       const text = (selector) => row.querySelector(selector).textContent.trim();
       return {
         name: text(".name"),
-        entries: text(".entries"),
+        entries: chips(row, ".entries .entry"),
         amount: parseFloat(text(".amount")),
         alcoholPercent: parseFloat(text(".alcohol-percent")),
         alcohol: parseFloat(text(".alcohol")),
@@ -176,7 +205,8 @@ function readCatalogue(page) {
     drinkListsError: document.querySelector("drink-lists-view .error")?.textContent.trim() ?? "",
     gramsPerStandardDrink: parseFloat(document.querySelector("catalogue-settings input[name=gramsPerStandardDrink]")?.value),
     fileError: document.querySelector("catalogue-file .error")?.textContent.trim() ?? "",
-  }));
+    };
+  });
 }
 
 async function addLiquid(page, { name, alcoholPercent }) {
@@ -231,6 +261,30 @@ async function editLiquid(page, name, { name: newName, alcoholPercent }) {
   await form.locator("input[name=name]").fill(newName);
   await form.locator("input[name=alcoholPercent]").fill(String(alcoholPercent));
   await form.getByRole("button", { name: "Save" }).click();
+}
+
+async function removePart(page, drinkName, liquidName) {
+  await page.locator(`drinks-view tr[data-drink="${drinkName}"] .part[data-liquid="${liquidName}"] button.remove-part`).click();
+}
+
+async function renameDrink(page, name, newName) {
+  const form = page.locator(`drinks-view tr[data-drink="${name}"] form.edit-drink`);
+  await form.locator("input[name=name]").fill(newName);
+  await form.getByRole("button", { name: "Save" }).click();
+}
+
+async function removeEntry(page, listName, drinkName) {
+  await page.locator(`drink-lists-view tr[data-drink-list="${listName}"] .entry[data-drink="${drinkName}"] button.remove-entry`).click();
+}
+
+async function renameDrinkList(page, name, newName) {
+  const form = page.locator(`drink-lists-view tr[data-drink-list="${name}"] form.edit-drink-list`);
+  await form.locator("input[name=name]").fill(newName);
+  await form.getByRole("button", { name: "Save" }).click();
+}
+
+async function removeDrinkList(page, name) {
+  await page.locator(`drink-lists-view tr[data-drink-list="${name}"] button.remove`).click();
 }
 
 // Clicks export and returns the downloaded file name and its text.
@@ -382,6 +436,123 @@ test.describe("removing a drink", () => {
         drinksError: '"Negroni" is used by Friday.',
       }),
     );
+  });
+
+  test("takes it out of the drinks when the user removes one that no drink list uses", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()]) });
+    await removeDrink(page, "Lager large");
+    await expect.poll(() => readCatalogue(page)).toEqual(catalogue({ drinks: [drink()] }));
+  });
+});
+
+test.describe("removing a part from a drink", () => {
+  test("takes it out of the parts and changes the figures", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni()]) });
+    await removePart(page, "Negroni", "Campari");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink({ parts: "Gin 45 ml, Sweet vermouth 45 ml", amount: 90, alcoholPercent: 27.5, alcohol: 24.8, standardDrinks: 1.6 })],
+      }),
+    );
+  });
+
+  test("keeps it out after the page is reloaded", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni()]) });
+    await removePart(page, "Negroni", "Campari");
+    await page.reload();
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink({ parts: "Gin 45 ml, Sweet vermouth 45 ml", amount: 90, alcoholPercent: 27.5, alcohol: 24.8, standardDrinks: 1.6 })],
+      }),
+    );
+  });
+});
+
+test.describe("renaming a drink", () => {
+  test("shows the new name in its row and in the entries of a list that uses it", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await renameDrink(page, "Negroni", "Boulevardier");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink({ name: "Boulevardier" }), lagerLarge()],
+        drinkLists: [drinkList({ entries: "2 × Boulevardier, 1 × Lager large" })],
+      }),
+    );
+  });
+
+  test("shows an error and leaves both drinks unchanged when renamed to a taken name", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()]) });
+    await renameDrink(page, "Negroni", "Lager large");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({ drinks: [drink(), lagerLarge()], drinksError: 'A drink named "Lager large" already exists.' }),
+    );
+  });
+});
+
+test.describe("removing an entry from a drink list", () => {
+  test("takes it out of the entries and changes the totals and hours to clear", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await removeEntry(page, "Friday", "Lager large");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink(), lagerLarge()],
+        drinkLists: [drinkList({ entries: "2 × Negroni", amount: 270, alcoholPercent: 26.7, alcohol: 72, standardDrinks: 4.7, hoursToClear: 4.7 })],
+      }),
+    );
+  });
+
+  test("keeps it out after the page is reloaded", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await removeEntry(page, "Friday", "Lager large");
+    await page.reload();
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink(), lagerLarge()],
+        drinkLists: [drinkList({ entries: "2 × Negroni", amount: 270, alcoholPercent: 26.7, alcohol: 72, standardDrinks: 4.7, hoursToClear: 4.7 })],
+      }),
+    );
+  });
+});
+
+test.describe("renaming a drink list", () => {
+  test("shows the new name", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await renameDrinkList(page, "Friday", "Party");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({ drinks: [drink(), lagerLarge()], drinkLists: [drinkList({ name: "Party" })] }),
+    );
+  });
+
+  test("shows an error and leaves both lists unchanged when renamed to a taken name", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday(), storedSaturday()]),
+    });
+    await renameDrinkList(page, "Friday", "Saturday");
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        drinks: [drink(), lagerLarge()],
+        drinkLists: [drinkList(), saturday()],
+        drinkListsError: 'A drink list named "Saturday" already exists.',
+      }),
+    );
+  });
+});
+
+test.describe("removing a drink list", () => {
+  test("takes it out and leaves the drinks unchanged", async ({ page }) => {
+    await openCatalogue(page, {
+      stored: storedStores(seedLiquids(), [storedNegroni(), storedLagerLarge()], [storedFriday()]),
+    });
+    await removeDrinkList(page, "Friday");
+    await expect.poll(() => readCatalogue(page)).toEqual(catalogue({ drinks: [drink(), lagerLarge()] }));
   });
 });
 

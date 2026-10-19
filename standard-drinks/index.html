@@ -87,7 +87,11 @@
   catalogue-file { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
   catalogue-file .error { flex: 1 0 100%; }
   catalogue-file button.export { padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: none; cursor: pointer; }
-  form.edit-liquid { display: flex; gap: 0.25rem; }
+  form.edit-liquid, form.edit-drink, form.edit-drink-list { display: flex; gap: 0.25rem; }
+  .part, .entry { display: inline-block; margin-right: 0.5rem; white-space: nowrap; }
+  button.remove-part, button.remove-entry { font-size: 0.8rem; line-height: 1; color: var(--muted); background: none; border: 0; padding: 0 0.15rem; cursor: pointer; }
+  drinks-view td.edit-cell, drink-lists-view td.edit-cell { flex: 1 0 100%; width: auto; margin-top: 0.25rem; }
+  drinks-view td.actions, drink-lists-view td.actions { flex: 1 0 100%; width: auto; padding-left: 0; }
   form.edit-liquid input[name=alcoholPercent] { flex: 0 0 4.5rem; }
   td.edit-cell { width: 55%; }
   .error { color: var(--hot); font-size: 0.85rem; min-height: 1.2em; margin-top: 0.5rem; }
