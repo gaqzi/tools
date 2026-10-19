@@ -64,6 +64,9 @@ an existing name, and never add a Makefile or npm scripts in its place.
     script/test browser  # playwright test only
     script/server        # http://localhost:8000/
 
+Run commands from the repo root. Test commands are allowlisted as whole
+lines, so do not pipe or chain them.
+
 Tool versions are pinned in `.tool-versions` (asdf). CI runs
 `script/bootstrap` then `script/test` with the same pin via `actions/setup-node`.
 
