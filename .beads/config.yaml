@@ -65,6 +65,9 @@
 # - linear.api_key  → use LINEAR_API_KEY env var instead
 # - github.token    → use GITHUB_TOKEN env var instead
 
+dolt.shared-server: true
+dolt.auto-commit: "on"
+export.auto: false
 sync.remote: "git+ssh://git@github.com/gaqzi/tools.git"
 agents:
     file: CLAUDE.md
