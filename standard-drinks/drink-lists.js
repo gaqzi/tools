@@ -74,13 +74,19 @@ export class DrinkLists {
     return copy(drinkList);
   }
 
-  rename(name, newName) {
+  // The one change operation: every rule is checked before anything is
+  // written, and one call is one save.
+  update(name, { name: newName }) {
     const drinkList = this.#find(name);
-    const trimmed = validName(newName);
+    const trimmed = newName === undefined ? drinkList.name : validName(newName);
     this.#refuseTaken(trimmed, drinkList);
-    drinkList.name = trimmed;
+    if (trimmed !== drinkList.name) this.#rename(drinkList, trimmed);
     this.#changed();
     return copy(drinkList);
+  }
+
+  #rename(drinkList, trimmed) {
+    drinkList.name = trimmed;
   }
 
   remove(name) {

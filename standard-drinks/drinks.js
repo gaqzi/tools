@@ -81,14 +81,20 @@ export class Drinks {
     return copy(drink);
   }
 
-  rename(name, newName) {
+  // The one change operation: every rule is checked before anything is
+  // written, and one call is one save. A new name is relabelled in referrers.
+  update(name, { name: newName }) {
     const drink = this.#find(name);
-    const trimmed = validName(newName);
+    const trimmed = newName === undefined ? drink.name : validName(newName);
     this.#refuseTaken(trimmed, drink);
-    this.#referrers.relabel(drink.name, trimmed);
-    drink.name = trimmed;
+    if (trimmed !== drink.name) this.#rename(drink, trimmed);
     this.#changed();
     return copy(drink);
+  }
+
+  #rename(drink, trimmed) {
+    this.#referrers.relabel(drink.name, trimmed);
+    drink.name = trimmed;
   }
 
   remove(name) {

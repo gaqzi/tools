@@ -54,7 +54,7 @@ describe("a catalogue whose drinks refer to its liquids", () => {
   it("shows a renamed liquid in the drink that uses it, remembering the stores once per change", () => {
     const { catalogue, remembered } = open();
     catalogue.drinks.add({ name: "Gimlet", parts: [{ liquid: "gin", amount: 60 }] });
-    catalogue.liquids.rename("Gin", "London dry");
+    catalogue.liquids.update("Gin", { name: "London dry" });
 
     // `remember` is read for its call count: persisting once per change (the
     // drink added, the liquid renamed, and not again for the relabelled drink)
@@ -83,7 +83,7 @@ describe("a catalogue whose drink lists refer to its drinks", () => {
 
   it("shows a renamed drink in the entry of the list that uses it", () => {
     const { catalogue } = withNegroniOnFriday();
-    catalogue.drinks.rename("Negroni", "Boulevardier");
+    catalogue.drinks.update("Negroni", { name: "Boulevardier" });
 
     assert.deepEqual(catalogue.drinkLists.get("Friday"), {
       name: "Friday",

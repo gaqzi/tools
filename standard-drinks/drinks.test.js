@@ -280,23 +280,23 @@ describe("adding a drink", () => {
   });
 });
 
-describe("renaming a drink", () => {
+describe("updating a drink's name", () => {
   it("gives it the trimmed new name, keeps its place and saves once", () => {
     const { service, read } = open();
-    service.rename("negroni", "  Boulevardier ");
+    service.update("negroni", { name: "  Boulevardier " });
 
     assert.deepEqual(read(), bar({ drinks: [negroni({ name: "Boulevardier" }), martini()], saves: 1 }));
   });
 
-  it("returns a deep copy of the renamed drink", () => {
+  it("returns a deep copy of the drink under its new name", () => {
     const { service } = open();
 
-    assert.deepEqual(service.rename("Negroni", "Boulevardier"), negroni({ name: "Boulevardier" }));
+    assert.deepEqual(service.update("Negroni", { name: "Boulevardier" }), negroni({ name: "Boulevardier" }));
   });
 
   it("allows a different casing of its own name", () => {
     const { service, read } = open();
-    service.rename("Negroni", "NEGRONI");
+    service.update("Negroni", { name: "NEGRONI" });
 
     assert.deepEqual(read(), bar({ drinks: [negroni({ name: "NEGRONI" }), martini()], saves: 1 }));
   });
@@ -304,26 +304,34 @@ describe("renaming a drink", () => {
   it("refuses an unknown name, naming it", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Mojito", "Daiquiri")), unknownDrink("Mojito"));
+    assert.deepEqual(refusal(() => service.update("Mojito", { name: "Daiquiri" })), unknownDrink("Mojito"));
   });
 
   it("refuses a name another drink has, naming the existing one", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Negroni", " MARTINI")), duplicateDrink("Martini"));
+    assert.deepEqual(refusal(() => service.update("Negroni", { name: " MARTINI" })), duplicateDrink("Martini"));
   });
 
   it("refuses a blank new name", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Negroni", "  ")), nameless("  "));
+    assert.deepEqual(refusal(() => service.update("Negroni", { name: "  " })), nameless("  "));
   });
 
   it("does not save when it refuses", () => {
     const { service, read } = open();
-    const refused = refusal(() => service.rename("Negroni", "martini"));
+    const refused = refusal(() => service.update("Negroni", { name: "martini" }));
 
     assert.deepEqual({ ...read(), refused }, { ...bar(), refused: duplicateDrink("Martini") });
+  });
+});
+
+describe("the public surface of the drinks service", () => {
+  it("is add, addPart, alcoholOf, alcoholPercentOf, all, amountOf, get, referredToBy, relabel, remove, removePart, update and usesOf", () => {
+    const surface = Object.getOwnPropertyNames(Drinks.prototype).filter((n) => n !== "constructor").sort();
+
+    assert.deepEqual(surface, ["add", "addPart", "alcoholOf", "alcoholPercentOf", "all", "amountOf", "get", "referredToBy", "relabel", "remove", "removePart", "update", "usesOf"]);
   });
 });
 
@@ -568,28 +576,42 @@ function relabelling(overrides = {}) {
   return { from: "Negroni", to: "Boulevardier", ...overrides };
 }
 
-describe("renaming a drink that referrers use", () => {
-  it("tells every referrer the stored old name and the trimmed new name, then saves once", () => {
-    const first = [];
-    const second = [];
-    const { service, read } = open(bar(), answers(), {
-      referrers: [relabellingReferrer(first), relabellingReferrer(second)],
+describe("updating a drink applies every given field as one change", () => {
+  // A drink has one updatable field today; the table is here so the shape
+  // matches liquids and a new field lands as a row, not a new describe.
+  const changes = [
+    { fields: "the name", change: { name: "  Boulevardier " }, drink: negroni({ name: "Boulevardier" }), told: [relabelling()] },
+    { fields: "the name in another casing", change: { name: "NEGRONI" }, drink: negroni({ name: "NEGRONI" }), told: [relabelling({ to: "NEGRONI" })] },
+  ];
+  for (const { fields, change, drink, told } of changes) {
+    it(`stores ${fields}, tells referrers only about a changed name, and saves once`, () => {
+      const first = [];
+      const second = [];
+      const { service, read } = open(bar(), answers(), {
+        referrers: [relabellingReferrer(first), relabellingReferrer(second)],
+      });
+      service.update("negroni", change);
+
+      assert.deepEqual(
+        { ...read(), relabelled: [first, second] },
+        { ...bar({ drinks: [drink, martini()], saves: 1 }), relabelled: [told, told] },
+      );
     });
-    service.rename("negroni", "  Boulevardier ");
+  }
 
-    assert.deepEqual(
-      { ...read(), relabelled: [first, second] },
-      { ...bar({ drinks: [negroni({ name: "Boulevardier" }), martini()], saves: 1 }), relabelled: [[relabelling()], [relabelling()]] },
-    );
-  });
+  const refused = [
+    { why: "the name is taken", change: { name: "martini" }, refusal: duplicateDrink("Martini") },
+    { why: "the name is blank", change: { name: "  " }, refusal: nameless("  ") },
+  ];
+  for (const { why, change, refusal: expected } of refused) {
+    it(`writes nothing, tells no referrer and does not save when ${why}`, () => {
+      const relabelled = [];
+      const { service, read } = open(bar(), answers(), { referrers: [relabellingReferrer(relabelled)] });
+      const result = refusal(() => service.update("Negroni", change));
 
-  it("tells no referrer and does not save when the rename is refused", () => {
-    const relabelled = [];
-    const { service, read } = open(bar(), answers(), { referrers: [relabellingReferrer(relabelled)] });
-    const refused = refusal(() => service.rename("Negroni", "martini"));
-
-    assert.deepEqual({ ...read(), relabelled, refused }, { ...bar(), relabelled: [], refused: duplicateDrink("Martini") });
-  });
+      assert.deepEqual({ ...read(), relabelled, result }, { ...bar(), relabelled: [], result: expected });
+    });
+  }
 });
 
 describe("removing a drink that referrers use", () => {

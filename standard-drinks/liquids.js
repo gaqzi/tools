@@ -72,21 +72,24 @@ export class Liquids {
     return { ...liquid };
   }
 
-  update(name, { alcoholPercent }) {
+  // The one change operation: every rule is checked before anything is
+  // written, and one call is one save. A new name is relabelled in referrers.
+  update(name, { name: newName, alcoholPercent }) {
     const liquid = this.#find(name);
-    liquid.alcoholPercent = validPercent(liquid.name, alcoholPercent);
+    const trimmed = newName === undefined ? liquid.name : validName(newName);
+    this.#refuseTaken(trimmed, liquid);
+    if (alcoholPercent !== undefined) {
+      validPercent(liquid.name, alcoholPercent);
+      liquid.alcoholPercent = alcoholPercent;
+    }
+    if (trimmed !== liquid.name) this.#rename(liquid, trimmed);
     this.#changed();
     return { ...liquid };
   }
 
-  rename(name, newName) {
-    const liquid = this.#find(name);
-    const trimmed = validName(newName);
-    this.#refuseTaken(trimmed, liquid);
+  #rename(liquid, trimmed) {
     this.#referrers.relabel(liquid.name, trimmed);
     liquid.name = trimmed;
-    this.#changed();
-    return { ...liquid };
   }
 
   remove(name) {

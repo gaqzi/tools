@@ -263,23 +263,23 @@ describe("adding a drink list", () => {
   });
 });
 
-describe("renaming a drink list", () => {
+describe("updating a drink list's name", () => {
   it("gives it the trimmed new name, keeps its place and saves once", () => {
     const { service, read } = open();
-    service.rename("friday", "  Party ");
+    service.update("friday", { name: "  Party " });
 
     assert.deepEqual(read(), night({ drinkLists: [friday({ name: "Party" }), saturday()], saves: 1 }));
   });
 
-  it("returns a deep copy of the renamed drink list", () => {
+  it("returns a deep copy of the drink list under its new name", () => {
     const { service } = open();
 
-    assert.deepEqual(service.rename("Friday", "Party"), friday({ name: "Party" }));
+    assert.deepEqual(service.update("Friday", { name: "Party" }), friday({ name: "Party" }));
   });
 
   it("allows a different casing of its own name", () => {
     const { service, read } = open();
-    service.rename("Friday", "FRIDAY");
+    service.update("Friday", { name: "FRIDAY" });
 
     assert.deepEqual(read(), night({ drinkLists: [friday({ name: "FRIDAY" }), saturday()], saves: 1 }));
   });
@@ -287,26 +287,64 @@ describe("renaming a drink list", () => {
   it("refuses an unknown name, naming it", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Sunday", "Party")), unknownDrinkList("Sunday"));
+    assert.deepEqual(refusal(() => service.update("Sunday", { name: "Party" })), unknownDrinkList("Sunday"));
   });
 
   it("refuses a name another drink list has, naming the existing one", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Friday", " SATURDAY")), duplicateDrinkList("Saturday"));
+    assert.deepEqual(refusal(() => service.update("Friday", { name: " SATURDAY" })), duplicateDrinkList("Saturday"));
   });
 
   it("refuses a blank new name", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Friday", "  ")), nameless("  "));
+    assert.deepEqual(refusal(() => service.update("Friday", { name: "  " })), nameless("  "));
   });
 
   it("does not save when it refuses", () => {
     const { service, read } = open();
-    const refused = refusal(() => service.rename("Friday", "saturday"));
+    const refused = refusal(() => service.update("Friday", { name: "saturday" }));
 
     assert.deepEqual({ ...read(), refused }, { ...night(), refused: duplicateDrinkList("Saturday") });
+  });
+});
+
+describe("updating a drink list applies every given field as one change", () => {
+  // A drink list has one updatable field today, and no referrers to tell; the
+  // table is here so the shape matches liquids and a new field lands as a row,
+  // not a new describe.
+  const changes = [
+    { fields: "the name", change: { name: "  Party " }, drinkList: friday({ name: "Party" }) },
+  ];
+  for (const { fields, change, drinkList } of changes) {
+    it(`stores ${fields} and saves once`, () => {
+      const { service, read } = open();
+      service.update("friday", change);
+
+      assert.deepEqual(read(), night({ drinkLists: [drinkList, saturday()], saves: 1 }));
+    });
+  }
+
+  const refused = [
+    { why: "the name is taken", change: { name: "saturday" }, refusal: duplicateDrinkList("Saturday") },
+    { why: "the name is blank", change: { name: "  " }, refusal: nameless("  ") },
+  ];
+  for (const { why, change, refusal: expected } of refused) {
+    it(`writes nothing and does not save when ${why}`, () => {
+      const { service, read } = open();
+      const result = refusal(() => service.update("Friday", change));
+
+      assert.deepEqual({ ...read(), result }, { ...night(), result: expected });
+    });
+  }
+});
+
+describe("the public surface of the drink lists service", () => {
+  it("is add, addEntry, alcoholOf, alcoholPercentOf, all, amountOf, get, relabel, remove, removeEntry, update and usesOf", () => {
+    const surface = Object.getOwnPropertyNames(DrinkLists.prototype).filter((n) => n !== "constructor").sort();
+
+    assert.deepEqual(surface, ["add", "addEntry", "alcoholOf", "alcoholPercentOf", "all", "amountOf", "get", "relabel", "remove", "removeEntry", "update", "usesOf"]);
   });
 });
 

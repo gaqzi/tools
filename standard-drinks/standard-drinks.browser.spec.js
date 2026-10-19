@@ -466,6 +466,18 @@ test.describe("editing a liquid", () => {
     );
   });
 
+  test("keeps a new name and percentage saved together in the row and in a drink that uses it after a reload", async ({ page }) => {
+    await openCatalogue(page, { stored: storedStores([liquid({ name: "Lager", alcoholPercent: 5 })], [storedLagerLarge()]) });
+    await editLiquid(page, "Lager", { name: "Pilsner", alcoholPercent: 8 });
+    await page.reload();
+    await expect.poll(() => readCatalogue(page)).toEqual(
+      catalogue({
+        liquids: [liquid({ name: "Pilsner", alcoholPercent: 8 })],
+        drinks: [lagerLarge({ parts: "Pilsner 500 ml", alcoholPercent: 8, alcohol: 40, standardDrinks: 2.6 })],
+      }),
+    );
+  });
+
   test("renaming a liquid shows the new name in a drink that uses it", async ({ page }) => {
     await openCatalogue(page, { stored: storedStores([liquid({ name: "Lager", alcoholPercent: 5 })], [storedLagerLarge()]) });
     await editLiquid(page, "Lager", { name: "Pilsner", alcoholPercent: 5 });

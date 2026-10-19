@@ -165,13 +165,6 @@ describe("adding a liquid", () => {
 });
 
 describe("updating a liquid", () => {
-  it("changes its alcohol percentage and saves once", () => {
-    const { service, read } = open();
-    service.update("gin", { alcoholPercent: 37.5 });
-
-    assert.deepEqual(read(), shelf({ liquids: [gin({ alcoholPercent: 37.5 }), limeJuice()], saves: 1 }));
-  });
-
   it("returns a copy of the updated liquid", () => {
     const { service } = open();
 
@@ -183,38 +176,25 @@ describe("updating a liquid", () => {
 
     assert.deepEqual(refusal(() => service.update("Rum", { alcoholPercent: 40 })), unknownLiquid("Rum"));
   });
-
-  it("refuses a percentage outside 0 to 100, naming the liquid", () => {
-    const { service } = open();
-
-    assert.deepEqual(refusal(() => service.update("Gin", { alcoholPercent: 101 })), outOfRange("Gin"));
-  });
-
-  it("does not save when it refuses", () => {
-    const { service, read } = open();
-    const refused = refusal(() => service.update("Gin", { alcoholPercent: 101 }));
-
-    assert.deepEqual({ ...read(), refused }, { ...shelf(), refused: outOfRange("Gin") });
-  });
 });
 
-describe("renaming a liquid", () => {
+describe("updating a liquid's name", () => {
   it("gives it the trimmed new name, keeps its place and saves once", () => {
     const { service, read } = open();
-    service.rename("gin", "  London dry ");
+    service.update("gin", { name: "  London dry " });
 
     assert.deepEqual(read(), shelf({ liquids: [gin({ name: "London dry" }), limeJuice()], saves: 1 }));
   });
 
-  it("returns a copy of the renamed liquid", () => {
+  it("returns a copy of the liquid under its new name", () => {
     const { service } = open();
 
-    assert.deepEqual(service.rename("Gin", "London dry"), gin({ name: "London dry" }));
+    assert.deepEqual(service.update("Gin", { name: "London dry" }), gin({ name: "London dry" }));
   });
 
   it("allows a different casing of its own name", () => {
     const { service, read } = open();
-    service.rename("Gin", "GIN");
+    service.update("Gin", { name: "GIN" });
 
     assert.deepEqual(read(), shelf({ liquids: [gin({ name: "GIN" }), limeJuice()], saves: 1 }));
   });
@@ -222,26 +202,34 @@ describe("renaming a liquid", () => {
   it("refuses an unknown name, naming it", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Rum", "Dark rum")), unknownLiquid("Rum"));
+    assert.deepEqual(refusal(() => service.update("Rum", { name: "Dark rum" })), unknownLiquid("Rum"));
   });
 
   it("refuses a name another liquid has, naming the existing one", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Gin", " lime JUICE")), duplicateLiquid("Lime juice"));
+    assert.deepEqual(refusal(() => service.update("Gin", { name: " lime JUICE" })), duplicateLiquid("Lime juice"));
   });
 
   it("refuses a blank new name", () => {
     const { service } = open();
 
-    assert.deepEqual(refusal(() => service.rename("Gin", "  ")), nameless("  "));
+    assert.deepEqual(refusal(() => service.update("Gin", { name: "  " })), nameless("  "));
   });
 
   it("does not save when it refuses", () => {
     const { service, read } = open();
-    const refused = refusal(() => service.rename("Gin", "lime juice"));
+    const refused = refusal(() => service.update("Gin", { name: "lime juice" }));
 
     assert.deepEqual({ ...read(), refused }, { ...shelf(), refused: duplicateLiquid("Lime juice") });
+  });
+});
+
+describe("the public surface of the liquids service", () => {
+  it("is add, all, get, referredToBy, remove and update", () => {
+    const surface = Object.getOwnPropertyNames(Liquids.prototype).filter((n) => n !== "constructor").sort();
+
+    assert.deepEqual(surface, ["add", "all", "get", "referredToBy", "remove", "update"]);
   });
 });
 
@@ -297,28 +285,55 @@ function relabelling(overrides = {}) {
   return { from: "Gin", to: "London dry", ...overrides };
 }
 
-describe("renaming a liquid that referrers use", () => {
-  it("tells every referrer the stored old name and the trimmed new name, then saves once", () => {
-    const first = [];
-    const second = [];
-    const { service, read } = open(shelf(), {
-      referrers: [relabellingReferrer(first), relabellingReferrer(second)],
+describe("updating a liquid applies every given field as one change", () => {
+  const changes = [
+    { fields: "the name", change: { name: "  London dry " }, liquid: gin({ name: "London dry" }), told: [relabelling()] },
+    { fields: "the name in another casing", change: { name: "GIN" }, liquid: gin({ name: "GIN" }), told: [relabelling({ to: "GIN" })] },
+    { fields: "the percentage", change: { alcoholPercent: 37.5 }, liquid: gin({ alcoholPercent: 37.5 }), told: [] },
+    {
+      fields: "the name and the percentage",
+      change: { name: "  London dry ", alcoholPercent: 37.5 },
+      liquid: gin({ name: "London dry", alcoholPercent: 37.5 }),
+      told: [relabelling()],
+    },
+  ];
+  for (const { fields, change, liquid, told } of changes) {
+    it(`stores ${fields}, tells referrers only about a changed name, and saves once`, () => {
+      const first = [];
+      const second = [];
+      const { service, read } = open(shelf(), {
+        referrers: [relabellingReferrer(first), relabellingReferrer(second)],
+      });
+      service.update("gin", change);
+
+      assert.deepEqual(
+        { ...read(), relabelled: [first, second] },
+        { ...shelf({ liquids: [liquid, limeJuice()], saves: 1 }), relabelled: [told, told] },
+      );
     });
-    service.rename("gin", "  London dry ");
+  }
 
-    assert.deepEqual(
-      { ...read(), relabelled: [first, second] },
-      { ...shelf({ liquids: [gin({ name: "London dry" }), limeJuice()], saves: 1 }), relabelled: [[relabelling()], [relabelling()]] },
-    );
+  it("returns a copy holding both new values", () => {
+    const { service } = open();
+
+    assert.deepEqual(service.update("Gin", { name: "London dry", alcoholPercent: 37.5 }), gin({ name: "London dry", alcoholPercent: 37.5 }));
   });
 
-  it("tells no referrer and does not save when the rename is refused", () => {
-    const relabelled = [];
-    const { service, read } = open(shelf(), { referrers: [relabellingReferrer(relabelled)] });
-    const refused = refusal(() => service.rename("Gin", "lime juice"));
+  const refused = [
+    { why: "a valid name and a percentage out of range", change: { name: "London dry", alcoholPercent: 101 }, refusal: outOfRange("Gin") },
+    { why: "a percentage out of range alone", change: { alcoholPercent: 101 }, refusal: outOfRange("Gin") },
+    { why: "a taken name and a valid percentage", change: { name: " lime JUICE", alcoholPercent: 37.5 }, refusal: duplicateLiquid("Lime juice") },
+    { why: "a blank name and a valid percentage", change: { name: "  ", alcoholPercent: 37.5 }, refusal: nameless("  ") },
+  ];
+  for (const { why, change, refusal: expected } of refused) {
+    it(`writes nothing, tells no referrer and does not save when ${why}`, () => {
+      const relabelled = [];
+      const { service, read } = open(shelf(), { referrers: [relabellingReferrer(relabelled)] });
+      const result = refusal(() => service.update("Gin", change));
 
-    assert.deepEqual({ ...read(), relabelled, refused }, { ...shelf(), relabelled: [], refused: duplicateLiquid("Lime juice") });
-  });
+      assert.deepEqual({ ...read(), relabelled, result }, { ...shelf(), relabelled: [], result: expected });
+    });
+  }
 });
 
 describe("removing a liquid that referrers use", () => {

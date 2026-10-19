@@ -62,11 +62,7 @@ class LiquidsView extends HTMLElement {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       this.#attempt(() => {
-        let current = name;
-        if (nameInput.value !== name) current = this.#liquids.rename(name, nameInput.value).name;
-        if (percentInput.valueAsNumber !== alcoholPercent) {
-          this.#liquids.update(current, { alcoholPercent: percentInput.valueAsNumber });
-        }
+        this.#liquids.update(name, { name: nameInput.value, alcoholPercent: percentInput.valueAsNumber });
       });
     });
     return form;
