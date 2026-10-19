@@ -1,94 +1,32 @@
-# tools
+# CLAUDE.md
 
-Small single-purpose HTML tools. Each tool is one folder, deployed as-is by
-copying that folder to the web server. What is in the folder is what ships.
+This project's context lives on a Tillage map, not in this file.
 
-## Rules
+**Before any work:** call the `start_work` tool (Tillage MCP), with no arguments
+to orient. It returns this project's brief, rules, decisions, memory and task
+state.
 
-- **Vanilla only.** HTML, CSS and JavaScript as the browser runs them. No
-  frameworks, no build step, no bundling, no minification. The only
-  dependency allowed in `package.json` is `@playwright/test`.
-- **One folder per tool, self-contained.** A tool never imports from outside
-  its own folder. No `shared/`; copy small things instead.
-- **Logic and UI are separate.** Pure logic lives in ES modules that never
-  touch `document`, `window` or storage. UI lives in web components
-  (`class X extends HTMLElement`, light DOM, no shadow root) and plain
-  classes. Logic is tested in Node; components are only tested in the
-  browser, and only when the interaction is worth it.
-- **Screaming architecture naming.** Name a module after the concept it
-  owns (`mixing.js`, `vessels.js`, `remembered-settings.js`), a component
-  file after its tag (`water-mixer.js` defines `<water-mixer>`), and a test
-  after the module it tests (`mixing.test.js`). Never `utils.js`,
-  `helpers.js`, `app.js` or `calc.js`. If a file is hard to name it is two
-  concepts.
-- **Red-green TDD for all logic.** Write the failing test first, see it
-  fail for the expected reason, then write the code. See the workflow
-  below.
-- **Explicit imports.** `import { x } from "./mixing.js"` with the `.js`
-  extension. Both Node and the browser require it.
-- **Scripts load as modules.** `<script type="module" src="water-mixer.js">`.
-  ES modules do not load over `file://`, so run `script/server` and open
-  `http://localhost:8000/<tool>/`.
+**Before working in a new subtree of the map:** call `start_work` again for it —
+with the node the human pointed you at, or the path of the file you are about to
+touch. Rules are scoped by position on the map; the part you are entering may
+carry rules your last call did not include, and a summary of an earlier call is
+not a substitute for the rules themselves.
 
-## Testing
+**The map is this project's memory.** A durable fact — something the human tells
+you to remember, or something you would otherwise save to your own memory — is
+recorded on the map, and you confirm back that it landed. Never in this file, and
+never in your harness's own store: memory kept there is invisible to the human.
 
-| Layer | Files | Runner |
-|---|---|---|
-| Logic | `*.test.js` next to the module | `node --test` with `node:assert/strict` |
-| Browser | `*.browser.spec.js` in the tool folder | Playwright, Chromium only |
+**If Tillage is unreachable:** stop and tell the human what failed. Do not
+proceed from the code alone — this project's rules are not in the repo.
 
-`node --test` picks up every `*.test.js` in the repo, which is why browser
-tests use the `.browser.spec.js` suffix and nothing else may.
+**If a lead agent dispatched you,** work from the context it handed you. You may
+read the map; the lead records — report what you did, and anything worth
+remembering, to the lead.
 
-Tests use `describe`/`it` and read as sentences:
-
-```js
-describe("mixing boiling water with room-temperature water", () => {
-  it("needs no boiling water when the target equals room temperature", () => {
-    assert.equal(boilingWaterFor({ totalMl: 500, targetC: 15, roomC: 15 }), 0);
-  });
-});
-```
-
-## Commands
-
-Scripts follow GitHub's "scripts to rule them all" convention
-(https://github.com/github/scripts-to-rule-them-all): every repo task is a
-bash script under `script/` with a conventional name, so the commands are
-the same across repos. Add a new script only for a task that does not fit
-an existing name, and never add a Makefile or npm scripts in its place.
-
-    script/bootstrap     # npm ci + Chromium; re-run if script/test complains
-    script/test          # unit then browser, stops at the first red suite
-    script/test unit     # node --test only
-    script/test browser  # playwright test only
-    script/server        # http://localhost:8000/
-
-Run commands from the repo root. Test commands are allowlisted as whole
-lines, so do not pipe or chain them.
-
-Tool versions are pinned in `.tool-versions` (asdf). CI runs
-`script/bootstrap` then `script/test` with the same pin via `actions/setup-node`.
-
-## Change workflow
-
-Changes are planned at the top level in conversation, then executed in
-three separate subagent passes so the tests themselves get checked:
-
-1. **Red.** One agent writes only the tests for the agreed behaviour, named
-   as sentences, plus any empty module stubs needed for them to load. It
-   does not write implementation.
-2. **Verify red.** Run `script/test`. Every new test must fail, and fail for
-   the expected reason (missing behaviour, not a typo or import error).
-   Fix the tests, not the code, if they fail for the wrong reason.
-3. **Green.** A second agent implements until `script/test` is green. It may
-   not edit the tests; if a test is wrong it reports back instead.
-4. **Verify green.** A third agent, given the original plan and not the
-   implementation chat, checks that the tests cover the agreed criteria
-   and that the implementation follows the rules above.
-
-The agent briefs should contain the plan and the file paths, not the
-conversation.
+<!-- Generated by the Tillage map skill, template v2. Content added here is not
+     read by the map and will be proposed for migration when the map skill next
+     runs its stub check. -->
 
 # Agent Instructions
 
